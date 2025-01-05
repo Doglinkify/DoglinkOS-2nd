@@ -1,3 +1,3 @@
 # DoglinkOS-2nd
 
-undefined
+支持加载`GNU/MicroFish`

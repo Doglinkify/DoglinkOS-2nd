@@ -3,7 +3,8 @@
 
 use core::arch::asm;
 use DoglinkOS_2nd::console::{init as init_console, clear as clear_console, puts as console_puts};
-use DoglinkOS_2nd::{print, println};
+use DoglinkOS_2nd::int::{init as init_interrupt, register as register_interrupt_handler};
+use DoglinkOS_2nd::println;
 use limine::request::{FramebufferRequest, RequestsEndMarker, RequestsStartMarker};
 use limine::BaseRevision;
 
@@ -36,8 +37,12 @@ extern "C" fn kmain() -> ! {
         }
     }
     clear_console();
+    init_interrupt();
     println!("Hello, World!");
     println!("Loading DoglinkOS GNU/MicroFish...");
+    unsafe {
+        asm!("int 0x20");
+    }
     hang();
 }
 

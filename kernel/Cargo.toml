@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 limine = "0.3.1"
 noto-sans-mono-bitmap = "0.3.1"
+x86_64 = "0.15.2"

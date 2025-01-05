@@ -83,3 +83,28 @@ pub fn puts(s: &str) {
         putchar(c);
     }
 }
+
+impl core::fmt::Write for Console {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        puts(s);
+        Ok(())
+    }
+}
+
+
+#[macro_export]
+macro_rules! print {
+    ($($arg:tt)*) => ($crate::console::_print(format_args!($($arg)*)));
+}
+
+#[macro_export]
+macro_rules! println {
+    () => ($crate::print!("\n"));
+    ($($arg:tt)*) => ($crate::print!("{}\n", format_args!($($arg)*)));
+}
+
+pub fn _print(args: core::fmt::Arguments) {
+    unsafe {
+        core::fmt::write(&mut console, args);
+    }
+}

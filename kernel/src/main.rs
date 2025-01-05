@@ -3,6 +3,7 @@
 
 use core::arch::asm;
 use DoglinkOS_2nd::console::{init as init_console, clear as clear_console, puts as console_puts};
+use DoglinkOS_2nd::{print, println};
 use limine::request::{FramebufferRequest, RequestsEndMarker, RequestsStartMarker};
 use limine::BaseRevision;
 
@@ -35,8 +36,8 @@ extern "C" fn kmain() -> ! {
         }
     }
     clear_console();
-    console_puts("Hello, World!\n");
-    console_puts("Loading DoglinkOS GNU/MicroFish...\n");
+    println!("Hello, World!");
+    println!("Loading DoglinkOS GNU/MicroFish...");
     hang();
 }
 

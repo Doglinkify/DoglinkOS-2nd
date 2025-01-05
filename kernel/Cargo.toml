@@ -1,6 +1,6 @@
 [package]
-name = "limine-rust-template"
-version = "0.1.0"
+name = "DoglinkOS-2nd"
+version = "0.0.2-20250105"
 edition = "2021"
 
 [dependencies]

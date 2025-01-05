@@ -2,7 +2,7 @@
 #![no_main]
 
 use core::arch::asm;
-use DoglinkOS_2nd::console::{init as init_console, clear as clear_console, console_setchar};
+use DoglinkOS_2nd::console::{init as init_console, clear as clear_console, puts as console_puts};
 use limine::request::{FramebufferRequest, RequestsEndMarker, RequestsStartMarker};
 use limine::BaseRevision;
 
@@ -35,19 +35,8 @@ extern "C" fn kmain() -> ! {
         }
     }
     clear_console();
-    console_setchar(0, 0, 'H');
-    console_setchar(0, 1, 'e');
-    console_setchar(0, 2, 'l');
-    console_setchar(0, 3, 'l');
-    console_setchar(0, 4, 'o');
-    console_setchar(0, 5, ',');
-    console_setchar(0, 6, ' ');
-    console_setchar(0, 7, 'W');
-    console_setchar(0, 8, 'o');
-    console_setchar(0, 9, 'r');
-    console_setchar(0, 10, 'l');
-    console_setchar(0, 11, 'd');
-    console_setchar(0, 12, '!');
+    console_puts("Hello, World!\n");
+    console_puts("Loading DoglinkOS GNU/MicroFish...\n");
     hang();
 }
 

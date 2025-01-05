@@ -2,7 +2,7 @@
 #![no_main]
 
 use core::arch::asm;
-use DoglinkOS_2nd::console::{init as init_fb, display_fill};
+use DoglinkOS_2nd::console::{init as init_console, clear as clear_console, console_setchar};
 use limine::request::{FramebufferRequest, RequestsEndMarker, RequestsStartMarker};
 use limine::BaseRevision;
 
@@ -31,19 +31,32 @@ extern "C" fn kmain() -> ! {
 
     if let Some(framebuffer_response) = FRAMEBUFFER_REQUEST.get_response() {
         if let Some(framebuffer) = framebuffer_response.framebuffers().next() {
-            init_fb(&framebuffer);
+            init_console(&framebuffer);
         }
     }
-    display_fill(0, 0, 0xff);
-    hcf();
+    clear_console();
+    console_setchar(0, 0, 'H');
+    console_setchar(0, 1, 'e');
+    console_setchar(0, 2, 'l');
+    console_setchar(0, 3, 'l');
+    console_setchar(0, 4, 'o');
+    console_setchar(0, 5, ',');
+    console_setchar(0, 6, ' ');
+    console_setchar(0, 7, 'W');
+    console_setchar(0, 8, 'o');
+    console_setchar(0, 9, 'r');
+    console_setchar(0, 10, 'l');
+    console_setchar(0, 11, 'd');
+    console_setchar(0, 12, '!');
+    hang();
 }
 
 #[panic_handler]
 fn rust_panic(_info: &core::panic::PanicInfo) -> ! {
-    hcf();
+    hang();
 }
 
-fn hcf() -> ! {
+fn hang() -> ! {
     loop {
         unsafe {
             asm!("hlt");

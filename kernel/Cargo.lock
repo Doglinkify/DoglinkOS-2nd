@@ -7,6 +7,7 @@ name = "DoglinkOS-2nd"
 version = "0.0.2-20250105"
 dependencies = [
  "limine",
+ "noto-sans-mono-bitmap",
 ]
 
 [[package]]
@@ -23,3 +24,9 @@ checksum = "9ca87cab008b8efeebdbe037cd4d1438037d48c5cb6fed939ffa5aa06315a321"
 dependencies = [
  "bitflags",
 ]
+
+[[package]]
+name = "noto-sans-mono-bitmap"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1064d564ae026ae123bf5d607318b42a5b31d70a3c48e6ea7ee44cce4cdb095e"

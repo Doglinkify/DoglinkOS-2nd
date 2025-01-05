@@ -3,7 +3,7 @@ use limine::framebuffer::Framebuffer as LimineFrameBuffer;
 struct FrameBuffer {
     width: u64,
     height: u64,
-    addr: * mut u32,
+    addr: * mut u8,
     pitch: u64,
 }
 
@@ -12,7 +12,7 @@ impl FrameBuffer {
         FrameBuffer {
             width: 0,
             height: 0,
-            addr: 0 as * mut u32,
+            addr: 0 as * mut u8,
             pitch: 0,
         }
     }
@@ -21,7 +21,7 @@ impl FrameBuffer {
         FrameBuffer {
             width: fb.width(),
             height: fb.height(),
-            addr: fb.addr() as * mut u32,
+            addr: fb.addr(),
             pitch: fb.pitch(),
         }
     }
@@ -30,7 +30,7 @@ impl FrameBuffer {
         unsafe {
             for i in 0..self.height {
                 for j in 0..self.width {
-                    *(self.addr.offset((i * self.pitch / 4 + j) as isize)) = 0xffffffffu32 /*(r as u32) << 16 + (g as u32) << 8 + (b as u32)*/;
+                    *(self.addr.offset((i * self.pitch + j * 4) as isize) as * mut u32) = ((r as u32) << 16) + ((g as u32) << 8) + (b as u32);
                 }
             }
         }

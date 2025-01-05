@@ -34,7 +34,7 @@ extern "C" fn kmain() -> ! {
             init_fb(&framebuffer);
         }
     }
-    display_fill(0xff, 0, 0);
+    display_fill(0, 0, 0xff);
     hcf();
 }
 

@@ -4,8 +4,10 @@
 use core::arch::asm;
 use DoglinkOS_2nd::console::{init as init_console, clear as clear_console, puts as console_puts};
 use DoglinkOS_2nd::int::{init as init_interrupt, register as register_interrupt_handler};
+use DoglinkOS_2nd::mm::init as init_mm;
+use DoglinkOS_2nd::apic::init as init_apic;
 use DoglinkOS_2nd::println;
-use limine::request::{FramebufferRequest, RequestsEndMarker, RequestsStartMarker};
+use limine::request::{FramebufferRequest, HhdmRequest, RequestsEndMarker, RequestsStartMarker};
 use limine::BaseRevision;
 
 #[used]
@@ -15,6 +17,10 @@ static BASE_REVISION: BaseRevision = BaseRevision::new();
 #[used]
 #[link_section = ".requests"]
 static FRAMEBUFFER_REQUEST: FramebufferRequest = FramebufferRequest::new();
+
+#[used]
+#[link_section = ".requests"]
+static HHDM_REQUEST: HhdmRequest = HhdmRequest::new();
 
 /// Define the stand and end markers for Limine requests.
 #[used]
@@ -27,8 +33,6 @@ static _END_MARKER: RequestsEndMarker = RequestsEndMarker::new();
 
 #[no_mangle]
 extern "C" fn kmain() -> ! {
-    // All limine requests must also be referenced in a called function, otherwise they may be
-    // removed by the linker.
     assert!(BASE_REVISION.is_supported());
 
     if let Some(framebuffer_response) = FRAMEBUFFER_REQUEST.get_response() {
@@ -36,18 +40,21 @@ extern "C" fn kmain() -> ! {
             init_console(&framebuffer);
         }
     }
+
     clear_console();
-    init_interrupt();
     println!("Hello, World!");
     println!("Loading DoglinkOS GNU/MicroFish...");
-    unsafe {
-        asm!("int 0x20");
-    }
+    let hhdm_response = HHDM_REQUEST.get_response().unwrap();
+    init_mm(&hhdm_response);
+    init_interrupt();
+    init_apic();
+    println!("{:#?}", x86_64::registers::control::Cr3::read());
     hang();
 }
 
 #[panic_handler]
-fn rust_panic(_info: &core::panic::PanicInfo) -> ! {
+fn rust_panic(info: &core::panic::PanicInfo) -> ! {
+    println!("panic: {:#?}", info);
     hang();
 }
 

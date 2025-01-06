@@ -11,7 +11,9 @@ pub fn init() {
     unsafe {
         IDT.load();
     }
-    register(32, handler);
+    register(32, handler1);
+    register(33, handler2);
+    register(34, handler3);
 }
 
 pub fn register(n: u8, handler: HandlerFunc) {
@@ -20,6 +22,13 @@ pub fn register(n: u8, handler: HandlerFunc) {
     }
 }
 
-pub extern "x86-interrupt" fn handler(_: InterruptStackFrame) {
-    println!("interrupt");
+pub extern "x86-interrupt" fn handler1(_: InterruptStackFrame) {
+    println!("timer interrupt");
+}
+
+pub extern "x86-interrupt" fn handler2(_: InterruptStackFrame) {
+    println!("error interrupt");
+}
+pub extern "x86-interrupt" fn handler3(_: InterruptStackFrame) {
+    println!("spurious interrupt");
 }

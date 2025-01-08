@@ -6,7 +6,7 @@ pub static mut offset: u64 = 0;
 pub fn init(res: &HhdmResponse) {
     unsafe {
         offset = res.offset();
-        println!("{offset}");
+        // println!("{offset}");
     }
 }
 

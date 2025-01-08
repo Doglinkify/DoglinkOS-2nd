@@ -49,11 +49,17 @@ pub fn setchar(x: u64, y: u64, c: char) {
     }
 }
 
+pub fn cr() {
+    unsafe {
+        console.cursor_y = 0;
+    }
+}
+
 pub fn newline() {
     // TODO: roll
     unsafe {
+        cr();
         console.cursor_x += 1;
-        console.cursor_y = 0;
     }
 }
 
@@ -69,6 +75,7 @@ pub fn inc() {
 pub fn putchar(c: char) {
     match c {
         '\n' => newline(),
+        '\r' => cr(),
         oc => {
             unsafe {
                 setchar(console.cursor_x, console.cursor_y, oc);

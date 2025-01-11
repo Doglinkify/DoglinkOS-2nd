@@ -24,7 +24,7 @@ pub fn register(n: u8, handler: HandlerFunc) {
 }
 
 pub extern "x86-interrupt" fn handler1(_: InterruptStackFrame) {
-    println!("timer interrupt");
+//    println!("timer interrupt");
     crate::apic::eoi();
 }
 

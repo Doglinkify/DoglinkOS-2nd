@@ -6,8 +6,9 @@ use DoglinkOS_2nd::console::{init as init_console, clear as clear_console, puts 
 use DoglinkOS_2nd::int::{init as init_interrupt, register as register_interrupt_handler};
 use DoglinkOS_2nd::mm::init as init_mm;
 use DoglinkOS_2nd::apic::init as init_apic;
+use DoglinkOS_2nd::acpi::init as init_acpi;
 use DoglinkOS_2nd::println;
-use limine::request::{FramebufferRequest, HhdmRequest, RequestsEndMarker, RequestsStartMarker};
+use limine::request::{FramebufferRequest, HhdmRequest, RsdpRequest, RequestsEndMarker, RequestsStartMarker};
 use limine::BaseRevision;
 
 #[used]
@@ -21,6 +22,10 @@ static FRAMEBUFFER_REQUEST: FramebufferRequest = FramebufferRequest::new();
 #[used]
 #[link_section = ".requests"]
 static HHDM_REQUEST: HhdmRequest = HhdmRequest::new();
+
+#[used]
+#[link_section = ".requests"]
+static RSDP_REQUEST: RsdpRequest = RsdpRequest::new();
 
 /// Define the stand and end markers for Limine requests.
 #[used]
@@ -48,7 +53,8 @@ extern "C" fn kmain() -> ! {
     init_mm(&hhdm_response);
     init_interrupt();
     init_apic();
-    println!("{:#?}", x86_64::registers::control::Cr3::read());
+    let rsdp_response = RSDP_REQUEST.get_response().unwrap();
+    init_acpi(&rsdp_response);
     hang();
 }
 

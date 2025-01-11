@@ -56,10 +56,13 @@ pub fn cr() {
 }
 
 pub fn newline() {
-    // TODO: roll
     unsafe {
         cr();
         console.cursor_x += 1;
+        if console.cursor_x == console.width {
+            console.cursor_x = 0;
+            clear();
+        }
     }
 }
 

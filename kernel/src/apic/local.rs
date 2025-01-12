@@ -4,7 +4,15 @@ use crate::print;
 
 static mut LAPIC: Option<LocalApic> = None;
 
+fn disable_pic() {
+    unsafe {
+        x86_64::instructions::port::PortWriteOnly::new(0x21).write(0xffu8);
+        x86_64::instructions::port::PortWriteOnly::new(0xA1).write(0xffu8);
+    }
+}
+
 pub fn init() {
+    disable_pic(); // IMPORTANT
     let apic_phys_addr = unsafe { xapic_base() };
     let mut lapic = LocalApicBuilder::new()
         .timer_vector(32)

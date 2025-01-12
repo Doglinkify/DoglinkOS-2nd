@@ -40,4 +40,8 @@ pub extern "x86-interrupt" fn handler3(_: InterruptStackFrame) {
 
 pub extern "x86-interrupt" fn handler4(_: InterruptStackFrame) {
     putchar('A');
+    unsafe {
+        let _: u8 = x86_64::instructions::port::PortReadOnly::new(0x60).read();
+    }
+    crate::apic::local::eoi();
 }

@@ -5,7 +5,7 @@ use core::arch::asm;
 use DoglinkOS_2nd::console::{init as init_console, clear as clear_console, puts as console_puts};
 use DoglinkOS_2nd::int::{init as init_interrupt, register as register_interrupt_handler};
 use DoglinkOS_2nd::mm::init as init_mm;
-use DoglinkOS_2nd::apic::init as init_apic;
+use DoglinkOS_2nd::apic::{local::init as init_lapic, io::init as init_ioapic};
 use DoglinkOS_2nd::acpi::{init as init_acpi, parse_madt};
 use DoglinkOS_2nd::println;
 use limine::request::{FramebufferRequest, HhdmRequest, RsdpRequest, RequestsEndMarker, RequestsStartMarker};
@@ -47,15 +47,15 @@ extern "C" fn kmain() -> ! {
     }
 
     clear_console();
-    println!("Hello, World!");
     println!("Loading DoglinkOS GNU/MicroFish...");
     let hhdm_response = HHDM_REQUEST.get_response().unwrap();
     init_mm(&hhdm_response);
     init_interrupt();
-    init_apic();
+    init_lapic();
     let rsdp_response = RSDP_REQUEST.get_response().unwrap();
     init_acpi(&rsdp_response);
-    parse_madt();
+    let ioapic_phys_addr = parse_madt();
+    init_ioapic(ioapic_phys_addr);
     hang();
 }
 

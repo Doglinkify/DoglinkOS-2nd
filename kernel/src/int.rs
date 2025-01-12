@@ -15,6 +15,7 @@ pub fn init() {
     register(32, handler1);
     register(33, handler2);
     register(34, handler3);
+    register(36, handler4);
     x86_64::instructions::interrupts::enable();
 }
 
@@ -26,12 +27,17 @@ pub fn register(n: u8, handler: HandlerFunc) {
 
 pub extern "x86-interrupt" fn handler1(_: InterruptStackFrame) {
     putchar('.');
-    crate::apic::eoi();
+    crate::apic::local::eoi();
 }
 
 pub extern "x86-interrupt" fn handler2(_: InterruptStackFrame) {
     println!("error interrupt");
 }
+
 pub extern "x86-interrupt" fn handler3(_: InterruptStackFrame) {
     println!("spurious interrupt");
+}
+
+pub extern "x86-interrupt" fn handler4(_: InterruptStackFrame) {
+    putchar('A');
 }

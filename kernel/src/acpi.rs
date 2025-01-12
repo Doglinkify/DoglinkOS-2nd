@@ -43,7 +43,7 @@ pub struct MADT {
     header: ACPI_table_header,
     local_apic_addr: u32,
     flags: u32,
-    record_marker: (),
+//    record_marker: (),
 }
 
 pub static mut rsdp: * const RSDP = 0 as * const RSDP;
@@ -58,10 +58,29 @@ pub fn init(res: &RsdpResponse) {
         println!("{:?}", *xsdt);
         for i in 0..16 {
             let head = phys_to_virt((*xsdt).pointers[i]) as * const ACPI_table_header;
-            if (*head).signature == [65, 80, 73, 67] {
+            if (*head).signature == [65, 80, 73, 67] { // "APIC"
                 madt = head as * const MADT;
-                println!("{:#?}", *madt);
+                println!("{:?}", *madt);
             }
+        }
+    }
+}
+
+pub fn parse_madt() {
+    unsafe {
+        let mut p = madt.offset(1) as * const u8;
+        let edge = (madt as * const u8).offset((*madt).header.length as isize);
+        while p < edge {
+            let entry_type = *p;
+            println!("Entry type {}: {}", entry_type, ["Processor Local APIC", "I/O APIC",
+                                                       "I/O APIC Interrupt Source Override",
+                                                       "I/O APIC Non-maskable interrupt source",
+                                                       "Local APIC Non-maskable interrupts",
+                                                       "Local APIC Address Override",
+                                                       "Processor Local x2APIC"
+                                                      ][entry_type as usize]);
+            let entry_length = *(p.offset(1));
+            p = p.offset((entry_length) as isize);
         }
     }
 }

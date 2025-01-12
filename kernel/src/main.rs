@@ -6,7 +6,7 @@ use DoglinkOS_2nd::console::{init as init_console, clear as clear_console, puts 
 use DoglinkOS_2nd::int::{init as init_interrupt, register as register_interrupt_handler};
 use DoglinkOS_2nd::mm::init as init_mm;
 use DoglinkOS_2nd::apic::init as init_apic;
-use DoglinkOS_2nd::acpi::init as init_acpi;
+use DoglinkOS_2nd::acpi::{init as init_acpi, parse_madt};
 use DoglinkOS_2nd::println;
 use limine::request::{FramebufferRequest, HhdmRequest, RsdpRequest, RequestsEndMarker, RequestsStartMarker};
 use limine::BaseRevision;
@@ -55,6 +55,7 @@ extern "C" fn kmain() -> ! {
     init_apic();
     let rsdp_response = RSDP_REQUEST.get_response().unwrap();
     init_acpi(&rsdp_response);
+    parse_madt();
     hang();
 }
 

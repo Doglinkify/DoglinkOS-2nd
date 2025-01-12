@@ -1,6 +1,6 @@
 use x2apic::lapic::{TimerMode, TimerDivide, LocalApic, LocalApicBuilder, xapic_base};
 use crate::mm::phys_to_virt;
-use crate::print;
+use crate::println;
 
 static mut LAPIC: Option<LocalApic> = None;
 
@@ -27,6 +27,7 @@ pub fn init() {
         lapic.set_timer_divide(TimerDivide::Div2);
         lapic.enable_timer();
         lapic.set_timer_initial(0xffffffu32);
+        println!("lapic id: {}", lapic.id());
         LAPIC = Some(lapic);
     }
 }

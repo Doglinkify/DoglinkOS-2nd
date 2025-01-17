@@ -48,11 +48,11 @@ pub struct MADT {
 #[derive(Debug, Copy, Clone)]
 #[repr(packed)]
 pub struct PCIE_CFG_ALLOC {
-    base_addr: u64,
-    pci_segment_group_number: u16,
-    start_pci_bus_number: u8,
-    end_pci_bus_number: u8,
-    reserved: u32,
+    pub base_addr: u64,
+    pub pci_segment_group_number: u16,
+    pub start_pci_bus_number: u8,
+    pub end_pci_bus_number: u8,
+    pub reserved: u32,
 }
 
 #[derive(Debug)]
@@ -60,7 +60,7 @@ pub struct PCIE_CFG_ALLOC {
 pub struct MCFG {
     header: ACPI_table_header,
     reserved: u64,
-    alloc: PCIE_CFG_ALLOC,
+    pub alloc: PCIE_CFG_ALLOC,
 }
 
 pub static mut rsdp: * const RSDP = 0 as * const RSDP;
@@ -113,10 +113,4 @@ pub fn parse_madt() -> u64 {
         }
     }
     res
-}
-
-pub fn parse_mcfg() {
-    unsafe {
-        println!("{:#?}", (*mcfg).alloc);
-    }
 }

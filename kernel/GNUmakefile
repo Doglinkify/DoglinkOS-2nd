@@ -6,17 +6,8 @@ MAKEFLAGS += -rR
 # Change as needed.
 override OUTPUT := kernel
 
-# Convenience macro to reliably declare user overridable variables.
-override USER_VARIABLE = $(if $(filter $(origin $(1)),default undefined),$(eval override $(1) := $(2)))
-
-# Target architecture to build for. Default to x86_64.
-$(call USER_VARIABLE,KARCH,x86_64)
-
 ifeq ($(RUST_TARGET),)
-    override RUST_TARGET := $(KARCH)-unknown-none
-	ifeq ($(KARCH),riscv64)
-    	override RUST_TARGET := riscv64gc-unknown-none-elf
-	endif
+    override RUST_TARGET := x86_64-unknown-none
 endif
 
 ifeq ($(RUST_PROFILE),)

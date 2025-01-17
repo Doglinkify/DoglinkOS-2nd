@@ -45,9 +45,28 @@ pub struct MADT {
     flags: u32,
 }
 
+#[derive(Debug, Copy, Clone)]
+#[repr(packed)]
+pub struct PCIE_CFG_ALLOC {
+    base_addr: u64,
+    pci_segment_group_number: u16,
+    start_pci_bus_number: u8,
+    end_pci_bus_number: u8,
+    reserved: u32,
+}
+
+#[derive(Debug)]
+#[repr(packed)]
+pub struct MCFG {
+    header: ACPI_table_header,
+    reserved: u64,
+    alloc: PCIE_CFG_ALLOC,
+}
+
 pub static mut rsdp: * const RSDP = 0 as * const RSDP;
 pub static mut xsdt: * const XSDT = 0 as * const XSDT;
 pub static mut madt: * const MADT = 0 as * const MADT;
+pub static mut mcfg: * const MCFG = 0 as * const MCFG;
 
 pub fn init(res: &RsdpResponse) {
     unsafe {
@@ -56,11 +75,15 @@ pub fn init(res: &RsdpResponse) {
         xsdt = phys_to_virt((*rsdp).xsdt_addr) as * const XSDT;
         // println!("{:?}", *xsdt);
         for i in 0..16 {
+            if (*xsdt).pointers[i] == 0 {
+                break;
+            }
             let head = phys_to_virt((*xsdt).pointers[i]) as * const ACPI_table_header;
             if (*head).signature == [65, 80, 73, 67] { // "APIC"
                 madt = head as * const MADT;
-                break;
                 // println!("{:?}", *madt);
+            } else if (*head).signature == [77, 67, 70, 71] { // "MCFG"
+                mcfg = head as * const MCFG;
             }
         }
     }
@@ -90,4 +113,10 @@ pub fn parse_madt() -> u64 {
         }
     }
     res
+}
+
+pub fn parse_mcfg() {
+    unsafe {
+        println!("{:#?}", (*mcfg).alloc);
+    }
 }

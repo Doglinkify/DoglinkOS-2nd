@@ -6,3 +6,4 @@ pub mod int;
 pub mod mm;
 pub mod apic;
 pub mod acpi;
+pub mod cpu;

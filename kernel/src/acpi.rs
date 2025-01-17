@@ -59,6 +59,7 @@ pub fn init(res: &RsdpResponse) {
             let head = phys_to_virt((*xsdt).pointers[i]) as * const ACPI_table_header;
             if (*head).signature == [65, 80, 73, 67] { // "APIC"
                 madt = head as * const MADT;
+                break;
                 // println!("{:?}", *madt);
             }
         }

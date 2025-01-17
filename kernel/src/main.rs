@@ -7,6 +7,7 @@ use DoglinkOS_2nd::int::{init as init_interrupt, register as register_interrupt_
 use DoglinkOS_2nd::mm::init as init_mm;
 use DoglinkOS_2nd::apic::{local::init as init_lapic, io::init as init_ioapic};
 use DoglinkOS_2nd::acpi::{init as init_acpi, parse_madt};
+use DoglinkOS_2nd::cpu::show_cpu_info;
 use DoglinkOS_2nd::println;
 use limine::request::{FramebufferRequest, HhdmRequest, RsdpRequest, RequestsEndMarker, RequestsStartMarker};
 use limine::BaseRevision;
@@ -56,6 +57,7 @@ extern "C" fn kmain() -> ! {
     init_acpi(&rsdp_response);
     let ioapic_phys_addr = parse_madt();
     init_ioapic(ioapic_phys_addr);
+    show_cpu_info();
     hang();
 }
 

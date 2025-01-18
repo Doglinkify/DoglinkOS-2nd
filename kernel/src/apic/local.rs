@@ -1,5 +1,5 @@
 use crate::mm::phys_to_virt;
-use crate::print;
+use crate::println;
 use x2apic::lapic::{xapic_base, LocalApic, LocalApicBuilder, TimerDivide, TimerMode};
 use spin::Mutex;
 
@@ -13,6 +13,7 @@ fn disable_pic() {
 }
 
 pub fn init() {
+    println!("[INFO] lapic: init() called");
     disable_pic(); // IMPORTANT
     let apic_phys_addr = unsafe { xapic_base() };
     let mut lapic = LocalApicBuilder::new()
@@ -30,6 +31,7 @@ pub fn init() {
         lapic.set_timer_initial(0xffffffu32);
         *LAPIC.lock() = Some(lapic);
     }
+    println!("[INFO] lapic: it didn't crash!");
 }
 
 pub fn eoi() {

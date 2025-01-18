@@ -16,7 +16,9 @@ pub static IDT: Lazy<InterruptDescriptorTable> = Lazy::new(|| {
 });
 
 pub fn init() {
+    println!("[INFO] interrupt: init() called");
     IDT.load();
+    println!("[INFO] interrupt: it didn't crash!");
     x86_64::instructions::interrupts::enable();
 }
 

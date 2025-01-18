@@ -132,6 +132,7 @@ pub static mcfg: Mutex<MCFG> = Mutex::new(MCFG {
 });
 
 pub unsafe fn init(res: &RsdpResponse) {
+    println!("[INFO] acpi: init() called");
     let mut rsdp_lock = rsdp.lock();
     let mut xsdt_lock = xsdt.lock();
     *rsdp_lock = *(res.address() as *const RSDP);
@@ -149,9 +150,11 @@ pub unsafe fn init(res: &RsdpResponse) {
             *mcfg.lock() = *(head as *const ACPI_table_header as *const MCFG);
         }
     }
+    println!("[INFO] acpi: it didn't crash!");
 }
 
 pub unsafe fn parse_madt() -> u64 {
+    println!("[INFO] acpi: parse_madt() called");
     let mut res: u64 = 0;
     let madt_lock = madt.lock();
     let mut p = &((*madt_lock).var_marker) as *const u8;
@@ -166,16 +169,20 @@ pub unsafe fn parse_madt() -> u64 {
         //                                            "Local APIC Address Override",
         //                                            "Processor Local x2APIC"
         //                                           ][entry_type as usize]);
+        println!("[DEBUG] acpi: parse_madt(): zzjrabbit");
         if entry_type == 1 {
             let res_addr = p.offset(4) as *const u32;
             res = *res_addr as u64;
             println!(
-                "DoglinkOS_2nd::acpi::parse_madt() will return {:?}",
+                "[DEBUG] DoglinkOS_2nd::acpi::parse_madt() will return {:?}",
                 res as *const ()
             );
         }
         let entry_length = *(p.offset(1));
         p = p.offset((entry_length) as isize);
+    }
+    if res == 0 {
+        println!("[WRANING] acpi: parse_madt() will return 0!");
     }
     res
 }

@@ -50,7 +50,7 @@ extern "C" fn kmain() -> ! {
         }
     }
 
-    println!("Loading DoglinkOS GNU/MicroFish...");
+    println!("[INFO] Loading DoglinkOS GNU/MicroFish...");
     let hhdm_response = HHDM_REQUEST.get_response().unwrap();
     init_mm(&hhdm_response);
     init_interrupt();

@@ -5,6 +5,7 @@ use spin::Mutex;
 pub static offset: Mutex<u64> = Mutex::new(0);
 
 pub fn init(res: &HhdmResponse) {
+    println!("[INFO] mm: init() called");
     *offset.lock() = res.offset();
 }
 

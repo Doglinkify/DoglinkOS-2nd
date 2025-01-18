@@ -2,6 +2,7 @@ mod framebuffer;
 
 use limine::framebuffer::Framebuffer as LimineFrameBuffer;
 use noto_sans_mono_bitmap::{get_raster, FontWeight, RasterHeight};
+use spin::Mutex;
 
 struct Console {
     width: u64,
@@ -19,83 +20,73 @@ impl Console {
             cursor_y: 0,
         }
     }
+
+    pub fn clear(&mut self) {
+        framebuffer::display_fill(0, 0, 0);
+        self.cursor_x = 0;
+        self.cursor_y = 0;
+    }
+
+    pub fn setchar(&mut self, x: u64, y: u64, c: char) {
+        let rc = get_raster(c, FontWeight::Regular, RasterHeight::Size16).unwrap();
+        for (i, di) in rc.raster().iter().enumerate() {
+            for (j, dj) in di.iter().enumerate() {
+                framebuffer::display_setpixel(x * 16 + i as u64, y * 7 + j as u64, *dj, *dj, *dj);
+            }
+        }
+    }
+
+    pub fn cr(&mut self) {
+        self.cursor_y = 0;
+    }
+
+    pub fn newline(&mut self) {
+        self.cr();
+        self.cursor_x += 1;
+        if self.cursor_x == self.width {
+            self.cursor_x = 0;
+            self.clear();
+        }
+    }
+
+    pub fn inc(&mut self) {
+        self.cursor_y += 1;
+        if self.cursor_y == self.width {
+            self.newline();
+        }
+    }
+
+    pub fn putchar(&mut self, c: char) {
+        match c {
+            '\n' => self.newline(),
+            '\r' => self.cr(),
+            oc => {
+                self.setchar(self.cursor_x, self.cursor_y, oc);
+                self.inc();
+            }
+        }
+    }
+
+    pub fn puts(&mut self, s: &str) {
+        for c in s.chars() {
+            self.putchar(c);
+        }
+    }
 }
 
-pub static mut console: Console = Console::null();
+pub static console: Mutex<Console> = Mutex::new(Console::null());
 
 pub fn init(fb: &LimineFrameBuffer) {
+    let mut lock = console.lock();
     framebuffer::init(fb);
-    unsafe {
-        console.width = fb.width() / 7;
-        console.height = fb.height() / 16;
-    }
-}
-
-pub fn clear() {
-    framebuffer::display_fill(0, 0, 0);
-    unsafe {
-        console.cursor_x = 0;
-        console.cursor_y = 0;
-    }
-}
-
-pub fn setchar(x: u64, y: u64, c: char) {
-    let rc = get_raster(c, FontWeight::Regular, RasterHeight::Size16).unwrap();
-    for (i, di) in rc.raster().iter().enumerate() {
-        for (j, dj) in di.iter().enumerate() {
-            framebuffer::display_setpixel(x * 16 + i as u64, y * 7 + j as u64, *dj, *dj, *dj);
-        }
-    }
-}
-
-pub fn cr() {
-    unsafe {
-        console.cursor_y = 0;
-    }
-}
-
-pub fn newline() {
-    unsafe {
-        cr();
-        console.cursor_x += 1;
-        if console.cursor_x == console.width {
-            console.cursor_x = 0;
-            clear();
-        }
-    }
-}
-
-pub fn inc() {
-    unsafe {
-        console.cursor_y += 1;
-        if console.cursor_y == console.width {
-            newline();
-        }
-    }
-}
-
-pub fn putchar(c: char) {
-    match c {
-        '\n' => newline(),
-        '\r' => cr(),
-        oc => {
-            unsafe {
-                setchar(console.cursor_x, console.cursor_y, oc);
-            }
-            inc();
-        }
-    }
-}
-
-pub fn puts(s: &str) {
-    for c in s.chars() {
-        putchar(c);
-    }
+    (*lock).width = fb.width() / 7;
+    (*lock).height = fb.height() / 16;
+    (*lock).clear();
 }
 
 impl core::fmt::Write for Console {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        puts(s);
+        self.puts(s);
         Ok(())
     }
 }
@@ -112,7 +103,5 @@ macro_rules! println {
 }
 
 pub fn _print(args: core::fmt::Arguments) {
-    unsafe {
-        core::fmt::write(&mut console, args);
-    }
+    core::fmt::write(&mut *console.lock(), args);
 }

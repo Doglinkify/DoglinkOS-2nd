@@ -153,7 +153,7 @@ pub unsafe fn init(res: &RsdpResponse) {
 
 pub unsafe fn parse_madt() -> u64 {
     let mut res: u64 = 0;
-    let mut madt_lock = madt.lock();
+    let madt_lock = madt.lock();
     let mut p = &((*madt_lock).var_marker) as *const u8;
     let edge = (&(*madt_lock) as * const MADT as *const u8).offset((*madt_lock).header.length as isize);
     // println!("{p:?} {edge:?}");

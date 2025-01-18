@@ -8,7 +8,7 @@ use limine::request::{
 use limine::BaseRevision;
 use DoglinkOS_2nd::acpi::{init as init_acpi, parse_madt};
 use DoglinkOS_2nd::apic::{io::init as init_ioapic, local::init as init_lapic};
-use DoglinkOS_2nd::console::{clear as clear_console, init as init_console, puts as console_puts};
+use DoglinkOS_2nd::console::init as init_console;
 use DoglinkOS_2nd::cpu::show_cpu_info;
 use DoglinkOS_2nd::int::init as init_interrupt;
 use DoglinkOS_2nd::mm::init as init_mm;
@@ -50,7 +50,6 @@ extern "C" fn kmain() -> ! {
         }
     }
 
-    clear_console();
     println!("Loading DoglinkOS GNU/MicroFish...");
     let hhdm_response = HHDM_REQUEST.get_response().unwrap();
     init_mm(&hhdm_response);

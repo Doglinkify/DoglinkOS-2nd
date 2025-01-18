@@ -1,8 +1,9 @@
 use crate::mm::phys_to_virt;
 use crate::print;
 use x2apic::lapic::{xapic_base, LocalApic, LocalApicBuilder, TimerDivide, TimerMode};
+use spin::Mutex;
 
-static mut LAPIC: Option<LocalApic> = None;
+static LAPIC: Mutex<Option<LocalApic>> = Mutex::new(None);
 
 fn disable_pic() {
     unsafe {
@@ -27,12 +28,12 @@ pub fn init() {
         lapic.set_timer_divide(TimerDivide::Div2);
         lapic.enable_timer();
         lapic.set_timer_initial(0xffffffu32);
-        LAPIC = Some(lapic);
+        *LAPIC.lock() = Some(lapic);
     }
 }
 
 pub fn eoi() {
     unsafe {
-        LAPIC.as_mut().unwrap().end_of_interrupt();
+       (*LAPIC.lock()).as_mut().unwrap().end_of_interrupt();
     }
 }

@@ -1,7 +1,6 @@
 #![feature(abi_x86_interrupt)]
 
-use crate::console::putchar;
-use crate::println;
+use crate::{print, println};
 use x86_64::structures::idt::HandlerFunc;
 use x86_64::structures::idt::InterruptDescriptorTable;
 use x86_64::structures::idt::InterruptStackFrame;
@@ -22,7 +21,7 @@ pub fn init() {
 }
 
 pub extern "x86-interrupt" fn handler1(_: InterruptStackFrame) {
-    putchar('.');
+    print!(".");
     crate::apic::local::eoi();
 }
 
@@ -35,7 +34,7 @@ pub extern "x86-interrupt" fn handler3(_: InterruptStackFrame) {
 }
 
 pub extern "x86-interrupt" fn handler4(_: InterruptStackFrame) {
-    putchar('A');
+    print!("A");
     unsafe {
         let _: u8 = x86_64::instructions::port::PortReadOnly::new(0x60).read();
     }

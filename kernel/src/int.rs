@@ -23,7 +23,7 @@ pub fn init() {
 }
 
 pub extern "x86-interrupt" fn handler1(_: InterruptStackFrame) {
-    print!(".");
+//    print!(".");
     crate::apic::local::eoi();
 }
 

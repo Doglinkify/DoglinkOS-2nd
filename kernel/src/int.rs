@@ -5,24 +5,20 @@ use crate::println;
 use x86_64::structures::idt::HandlerFunc;
 use x86_64::structures::idt::InterruptDescriptorTable;
 use x86_64::structures::idt::InterruptStackFrame;
+use spin::{Lazy, Mutex};
 
-pub static mut IDT: InterruptDescriptorTable = InterruptDescriptorTable::new();
+pub static IDT: Lazy<InterruptDescriptorTable> = Lazy::new(|| {
+    let mut temp = InterruptDescriptorTable::new();
+    temp[32].set_handler_fn(handler1);
+    temp[33].set_handler_fn(handler2);
+    temp[34].set_handler_fn(handler3);
+    temp[36].set_handler_fn(handler4);
+    temp
+});
 
 pub fn init() {
-    unsafe {
-        IDT.load();
-    }
-    register(32, handler1);
-    register(33, handler2);
-    register(34, handler3);
-    register(36, handler4);
+    IDT.load();
     x86_64::instructions::interrupts::enable();
-}
-
-pub fn register(n: u8, handler: HandlerFunc) {
-    unsafe {
-        IDT[n].set_handler_fn(handler);
-    }
 }
 
 pub extern "x86-interrupt" fn handler1(_: InterruptStackFrame) {

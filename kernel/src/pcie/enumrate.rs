@@ -1,9 +1,10 @@
 use crate::acpi::mcfg;
 use crate::mm::phys_to_virt;
 use crate::println;
+use spin::Mutex;
 
-pub static mut pcie_mmio_base: u64 = 0;
-pub static mut bus_range: core::ops::RangeInclusive<u8> = 0..=0;
+pub static pcie_mmio_base: Mutex<u64> = Mutex::new(0);
+
 #[derive(Debug)]
 #[repr(packed)]
 pub struct PCIConfigSpace {
@@ -24,7 +25,7 @@ pub struct PCIConfigSpace {
 
 pub fn get_config_space(bus: u8, device: u8, function: u8) -> &'static PCIConfigSpace {
     unsafe {
-        &*((pcie_mmio_base
+        &*((*pcie_mmio_base.lock()
             + ((bus as u64) << 20)
             + ((device as u64) << 15)
             + ((function as u64) << 12)) as *const PCIConfigSpace)
@@ -52,15 +53,12 @@ pub fn check(bus: u8, device: u8, function: u8) -> bool {
 
 pub fn doit() {
     println!("PCI enumerating result:");
-    unsafe {
-        pcie_mmio_base = phys_to_virt((*mcfg).alloc.base_addr);
-        bus_range = ((*mcfg).alloc.start_pci_bus_number)..=((*mcfg).alloc.end_pci_bus_number);
-        for bus in bus_range.clone() {
-            for device in 0..32 {
-                if check(bus, device, 0) {
-                    for function in 1..8 {
-                            check(bus, device, function);
-                    }
+    *pcie_mmio_base.lock() = phys_to_virt((*mcfg.lock()).alloc.base_addr);
+    for bus in 0..=255 {
+        for device in 0..32 {
+            if check(bus, device, 0) {
+                for function in 1..8 {
+                    check(bus, device, function);
                 }
             }
         }

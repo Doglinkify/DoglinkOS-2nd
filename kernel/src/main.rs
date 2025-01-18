@@ -10,7 +10,7 @@ use DoglinkOS_2nd::acpi::{init as init_acpi, parse_madt};
 use DoglinkOS_2nd::apic::{io::init as init_ioapic, local::init as init_lapic};
 use DoglinkOS_2nd::console::{clear as clear_console, init as init_console, puts as console_puts};
 use DoglinkOS_2nd::cpu::show_cpu_info;
-use DoglinkOS_2nd::int::{init as init_interrupt, register as register_interrupt_handler};
+use DoglinkOS_2nd::int::init as init_interrupt;
 use DoglinkOS_2nd::mm::init as init_mm;
 use DoglinkOS_2nd::pcie::enumrate::doit;
 use DoglinkOS_2nd::println;
@@ -57,9 +57,10 @@ extern "C" fn kmain() -> ! {
     init_interrupt();
     init_lapic();
     let rsdp_response = RSDP_REQUEST.get_response().unwrap();
-    init_acpi(&rsdp_response);
-    let ioapic_phys_addr = parse_madt();
-    init_ioapic(ioapic_phys_addr);
+    init_ioapic(unsafe {
+        init_acpi(&rsdp_response);
+        parse_madt()
+    });
     show_cpu_info();
     doit();
     hang();

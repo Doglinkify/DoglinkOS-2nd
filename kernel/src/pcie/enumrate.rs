@@ -11,27 +11,56 @@ pub struct PCIConfigSpace {
     device_id: u16,
     command: u16,
     status: u16,
-    prog_if: u16,
+    revision_id: u8,
+    prog_if: u8,
     subclass: u8,
     class_code: u8,
+    cache_line_size: u8,
+    latency_timer: u8,
+    header_type: u8,
+    BIST: u8,
     // TODO
 }
 
-pub fn get_config_space(bus: u8, device: u8) -> &'static PCIConfigSpace {
+pub fn get_config_space(bus: u8, device: u8, function: u8) -> &'static PCIConfigSpace {
     unsafe {
-        &*((pcie_mmio_base + ((bus as u64) << 20) + ((device as u64) << 15)) as * const PCIConfigSpace)
+        &*((pcie_mmio_base
+            + ((bus as u64) << 20)
+            + ((device as u64) << 15)
+            + ((function as u64) << 12)) as *const PCIConfigSpace)
     }
 }
 
+pub fn check(bus: u8, device: u8, function: u8) -> bool {
+    let config = get_config_space(bus, device, function);
+    if config.vendor_id != 65535 {
+        let vendor_id = config.vendor_id;
+        let device_id = config.device_id;
+        println!(
+            "{:02x}:{:02x}.{}: {:02x}{:02x}: {:04x}:{:04x}",
+            bus,
+            device,
+            function,
+            config.class_code,
+            config.subclass,
+            vendor_id,
+            device_id
+        );
+    }
+    config.vendor_id != 65535 && config.header_type & 0x80 == 0x80
+}
+
 pub fn doit() {
+    println!("PCI enumerating result:");
     unsafe {
         pcie_mmio_base = phys_to_virt((*mcfg).alloc.base_addr);
         bus_range = ((*mcfg).alloc.start_pci_bus_number)..=((*mcfg).alloc.end_pci_bus_number);
         for bus in bus_range.clone() {
             for device in 0..32 {
-                let config = get_config_space(bus, device);
-                if config.vendor_id != 65535 {
-                    println!("PCI bus {} device {}: {:?}", bus, device, *config);
+                if check(bus, device, 0) {
+                    for function in 1..8 {
+                            check(bus, device, function);
+                    }
                 }
             }
         }

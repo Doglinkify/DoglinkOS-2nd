@@ -39,7 +39,6 @@ pub fn clear() {
     }
 }
 
-
 pub fn setchar(x: u64, y: u64, c: char) {
     let rc = get_raster(c, FontWeight::Regular, RasterHeight::Size16).unwrap();
     for (i, di) in rc.raster().iter().enumerate() {
@@ -100,7 +99,6 @@ impl core::fmt::Write for Console {
         Ok(())
     }
 }
-
 
 #[macro_export]
 macro_rules! print {

@@ -1,10 +1,10 @@
 #![feature(abi_x86_interrupt)]
 
-use x86_64::structures::idt::InterruptDescriptorTable;
-use x86_64::structures::idt::HandlerFunc;
-use x86_64::structures::idt::InterruptStackFrame;
 use crate::console::putchar;
 use crate::println;
+use x86_64::structures::idt::HandlerFunc;
+use x86_64::structures::idt::InterruptDescriptorTable;
+use x86_64::structures::idt::InterruptStackFrame;
 
 pub static mut IDT: InterruptDescriptorTable = InterruptDescriptorTable::new();
 

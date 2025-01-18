@@ -1,6 +1,6 @@
-use limine::response::RsdpResponse;
 use crate::mm::phys_to_virt;
 use crate::println;
+use limine::response::RsdpResponse;
 
 #[derive(Debug)]
 #[repr(packed)]
@@ -63,27 +63,29 @@ pub struct MCFG {
     pub alloc: PCIE_CFG_ALLOC,
 }
 
-pub static mut rsdp: * const RSDP = 0 as * const RSDP;
-pub static mut xsdt: * const XSDT = 0 as * const XSDT;
-pub static mut madt: * const MADT = 0 as * const MADT;
-pub static mut mcfg: * const MCFG = 0 as * const MCFG;
+pub static mut rsdp: *const RSDP = 0 as *const RSDP;
+pub static mut xsdt: *const XSDT = 0 as *const XSDT;
+pub static mut madt: *const MADT = 0 as *const MADT;
+pub static mut mcfg: *const MCFG = 0 as *const MCFG;
 
 pub fn init(res: &RsdpResponse) {
     unsafe {
-        rsdp = res.address() as * const RSDP;
+        rsdp = res.address() as *const RSDP;
         // println!("{:?}", *rsdp);
-        xsdt = phys_to_virt((*rsdp).xsdt_addr) as * const XSDT;
+        xsdt = phys_to_virt((*rsdp).xsdt_addr) as *const XSDT;
         // println!("{:?}", *xsdt);
         for i in 0..16 {
             if (*xsdt).pointers[i] == 0 {
                 break;
             }
-            let head = phys_to_virt((*xsdt).pointers[i]) as * const ACPI_table_header;
-            if (*head).signature == [65, 80, 73, 67] { // "APIC"
-                madt = head as * const MADT;
+            let head = phys_to_virt((*xsdt).pointers[i]) as *const ACPI_table_header;
+            if (*head).signature == [65, 80, 73, 67] {
+                // "APIC"
+                madt = head as *const MADT;
                 // println!("{:?}", *madt);
-            } else if (*head).signature == [77, 67, 70, 71] { // "MCFG"
-                mcfg = head as * const MCFG;
+            } else if (*head).signature == [77, 67, 70, 71] {
+                // "MCFG"
+                mcfg = head as *const MCFG;
             }
         }
     }
@@ -92,8 +94,8 @@ pub fn init(res: &RsdpResponse) {
 pub fn parse_madt() -> u64 {
     let mut res: u64 = 0;
     unsafe {
-        let mut p = madt.offset(1) as * const u8;
-        let edge = (madt as * const u8).offset((*madt).header.length as isize);
+        let mut p = madt.offset(1) as *const u8;
+        let edge = (madt as *const u8).offset((*madt).header.length as isize);
         while p < edge {
             let entry_type = *p;
             // println!("Entry type {}: {}", entry_type, ["Processor Local APIC", "I/O APIC",
@@ -104,9 +106,12 @@ pub fn parse_madt() -> u64 {
             //                                            "Processor Local x2APIC"
             //                                           ][entry_type as usize]);
             if entry_type == 1 {
-                let res_addr = p.offset(4) as * const u32;
+                let res_addr = p.offset(4) as *const u32;
                 res = *res_addr as u64;
-                println!("DoglinkOS_2nd::acpi::parse_madt() will return {:?}", res as * const ());
+                println!(
+                    "DoglinkOS_2nd::acpi::parse_madt() will return {:?}",
+                    res as *const ()
+                );
             }
             let entry_length = *(p.offset(1));
             p = p.offset((entry_length) as isize);

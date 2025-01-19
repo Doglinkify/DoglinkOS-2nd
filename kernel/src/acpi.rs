@@ -44,7 +44,7 @@ pub struct MADT {
     header: ACPI_table_header,
     local_apic_addr: u32,
     flags: u32,
-    var_marker: [u8; 128], // to clone the rest of the MADT
+    var_marker: [u8; 1024], // to clone the rest of the MADT
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -106,7 +106,7 @@ pub static madt: Mutex<MADT> = Mutex::new(MADT {
     },
     local_apic_addr: 0,
     flags: 0,
-    var_marker: [0; 128],
+    var_marker: [0; 1024],
 });
 
 pub static mcfg: Mutex<MCFG> = Mutex::new(MCFG {
@@ -169,7 +169,8 @@ pub unsafe fn parse_madt() -> u64 {
         //                                            "Local APIC Address Override",
         //                                            "Processor Local x2APIC"
         //                                           ][entry_type as usize]);
-        println!("[DEBUG] acpi: parse_madt(): zzjrabbit");
+        // println!("[DEBUG] acpi: parse_madt(): zzjrabbit");
+        // any println here will cause the real machine to reboot :(
         if entry_type == 1 {
             let res_addr = p.offset(4) as *const u32;
             res = *res_addr as u64;
@@ -179,6 +180,9 @@ pub unsafe fn parse_madt() -> u64 {
             );
         }
         let entry_length = *(p.offset(1));
+        if entry_length < 0 || entry_length > 14 {
+            panic!("Abnormal entry length {entry_length}");
+        }
         p = p.offset((entry_length) as isize);
     }
     if res == 0 {

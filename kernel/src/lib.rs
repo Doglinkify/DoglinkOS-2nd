@@ -1,5 +1,6 @@
 #![no_std]
 #![feature(abi_x86_interrupt)]
+#![feature(slice_take)]
 
 pub mod acpi;
 pub mod apic;

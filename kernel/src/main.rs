@@ -56,10 +56,8 @@ extern "C" fn kmain() -> ! {
     init_interrupt();
     init_lapic();
     let rsdp_response = RSDP_REQUEST.get_response().unwrap();
-    init_ioapic(unsafe {
-        init_acpi(&rsdp_response);
-        parse_madt()
-    });
+    unsafe { init_acpi(&rsdp_response) };
+    init_ioapic(parse_madt());
     show_cpu_info();
     doit();
     hang();

@@ -153,15 +153,14 @@ pub unsafe fn init(res: &RsdpResponse) {
     println!("[INFO] acpi: it didn't crash!");
 }
 
-pub unsafe fn parse_madt() -> u64 {
+pub fn parse_madt() -> u64 {
     println!("[INFO] acpi: parse_madt() called");
     let mut res: u64 = 0;
     let madt_lock = madt.lock();
-    let mut p = &((*madt_lock).var_marker) as *const u8;
-    let edge = (&(*madt_lock) as * const MADT as *const u8).offset((*madt_lock).header.length as isize);
+    let mut range = &((*madt_lock).var_marker)[..((*madt_lock).header.length as usize - 44)];
     // println!("{p:?} {edge:?}");
-    while p < edge {
-        let entry_type = *p;
+    while range != &[] {
+        let entry_type = range[0];
         // println!("Entry type {}: {}", entry_type, ["Processor Local APIC", "I/O APIC",
         //                                            "I/O APIC Interrupt Source Override",
         //                                            "I/O APIC Non-maskable interrupt source",
@@ -172,18 +171,18 @@ pub unsafe fn parse_madt() -> u64 {
         // println!("[DEBUG] acpi: parse_madt(): zzjrabbit");
         // any println here will cause the real machine to reboot :(
         if entry_type == 1 {
-            let res_addr = p.offset(4) as *const u32;
-            res = *res_addr as u64;
+            res = (range[4] as u64) + ((range[5] as u64) << 8) +
+                ((range[6] as u64) << 16) + ((range[7] as u64) << 24);
             println!(
                 "[DEBUG] DoglinkOS_2nd::acpi::parse_madt() will return {:?}",
                 res as *const ()
             );
         }
-        let entry_length = *(p.offset(1));
-        if entry_length < 0 || entry_length > 14 {
+        let entry_length = range[1];
+        if entry_length > 14 {
             panic!("Abnormal entry length {entry_length}");
         }
-        p = p.offset((entry_length) as isize);
+        range.take(..(entry_length as usize)).unwrap();
     }
     if res == 0 {
         println!("[WRANING] acpi: parse_madt() will return 0!");

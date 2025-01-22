@@ -9,3 +9,4 @@ pub mod cpu;
 pub mod int;
 pub mod mm;
 pub mod pcie;
+pub mod ata;

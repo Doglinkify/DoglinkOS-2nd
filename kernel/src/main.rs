@@ -13,6 +13,7 @@ use DoglinkOS_2nd::cpu::show_cpu_info;
 use DoglinkOS_2nd::int::init as init_interrupt;
 use DoglinkOS_2nd::mm::init as init_mm;
 use DoglinkOS_2nd::pcie::enumrate::doit;
+use DoglinkOS_2nd::ata::init_and_test as test_ata;
 use DoglinkOS_2nd::println;
 
 #[used]
@@ -60,6 +61,7 @@ extern "C" fn kmain() -> ! {
     init_ioapic(parse_madt());
     show_cpu_info();
     doit();
+    test_ata();
     hang();
 }
 

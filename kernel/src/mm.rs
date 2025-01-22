@@ -6,19 +6,15 @@ use good_memory_allocator::SpinLockedAllocator;
 #[global_allocator]
 static ALLOCATOR: SpinLockedAllocator = SpinLockedAllocator::empty();
 
-#[used]
-static mut RESERVED_HEAP: [u8; 8 * 1024 * 1024] = [0; 8 * 1024 * 1024];
-
 pub static offset: Mutex<u64> = Mutex::new(0);
 
 pub fn init(res: &HhdmResponse) {
     println!("[INFO] mm: init() called");
-    unsafe {
-        println!("[INFO] RESERVED_HEAP is at {:?}", &RESERVED_HEAP as *const u8);
-    }
     *offset.lock() = res.offset();
+    let heap_address = phys_to_virt(0x10000);
+    println!("[INFO] RESERVED_HEAP is at {:?}", heap_address as *const ());
     unsafe {
-        ALLOCATOR.init(&mut RESERVED_HEAP as *mut u8 as usize, 8 * 1024 * 1024);
+        ALLOCATOR.init(heap_address as usize, 8 * 1024 * 1024);
     }
 }
 

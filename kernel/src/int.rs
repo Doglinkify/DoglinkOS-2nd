@@ -38,9 +38,12 @@ pub extern "x86-interrupt" fn handler3(_: InterruptStackFrame) {
 }
 
 pub extern "x86-interrupt" fn handler4(_: InterruptStackFrame) {
-    print!("A");
     unsafe {
-        let _: u8 = x86_64::instructions::port::PortReadOnly::new(0x60).read();
+        let scancode: u8 = x86_64::instructions::port::PortReadOnly::new(0x60).read();
+        let mut lock = crate::console::TERMINAL.lock();
+        if let Some(s) = lock.handle_keyboard(scancode) {
+            lock.process(s.as_bytes());
+        }
     }
     crate::apic::local::eoi();
 }

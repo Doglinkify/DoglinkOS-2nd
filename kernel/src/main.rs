@@ -6,23 +6,18 @@ use limine::request::{
     FramebufferRequest, HhdmRequest, RequestsEndMarker, RequestsStartMarker, RsdpRequest,
 };
 use limine::BaseRevision;
+use DoglinkOS_2nd::console::init as init_terminal;
 use DoglinkOS_2nd::acpi::{init as init_acpi, parse_madt};
 use DoglinkOS_2nd::apic::{io::init as init_ioapic, local::init as init_lapic};
-use DoglinkOS_2nd::console::init as init_console;
 use DoglinkOS_2nd::cpu::show_cpu_info;
 use DoglinkOS_2nd::int::init as init_interrupt;
 use DoglinkOS_2nd::mm::init as init_mm;
 use DoglinkOS_2nd::pcie::enumrate::doit;
-use DoglinkOS_2nd::ata::init_and_test as test_ata;
 use DoglinkOS_2nd::println;
 
 #[used]
 #[link_section = ".requests"]
 static BASE_REVISION: BaseRevision = BaseRevision::new();
-
-#[used]
-#[link_section = ".requests"]
-static FRAMEBUFFER_REQUEST: FramebufferRequest = FramebufferRequest::new();
 
 #[used]
 #[link_section = ".requests"]
@@ -44,16 +39,10 @@ static _END_MARKER: RequestsEndMarker = RequestsEndMarker::new();
 #[no_mangle]
 extern "C" fn kmain() -> ! {
     assert!(BASE_REVISION.is_supported());
-
-    if let Some(framebuffer_response) = FRAMEBUFFER_REQUEST.get_response() {
-        if let Some(framebuffer) = framebuffer_response.framebuffers().next() {
-            init_console(&framebuffer);
-        }
-    }
-
-    println!("[INFO] Loading DoglinkOS GNU/MicroFish...");
     let hhdm_response = HHDM_REQUEST.get_response().unwrap();
     init_mm(&hhdm_response);
+    init_terminal();
+    println!("[INFO] Loading DoglinkOS GNU/MicroFish...");
     init_interrupt();
     init_lapic();
     let rsdp_response = RSDP_REQUEST.get_response().unwrap();
@@ -61,7 +50,6 @@ extern "C" fn kmain() -> ! {
     init_ioapic(parse_madt());
     show_cpu_info();
     doit();
-    test_ata();
     hang();
 }
 

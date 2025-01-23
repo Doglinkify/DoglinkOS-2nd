@@ -1,11 +1,17 @@
 use limine::framebuffer::Framebuffer as LimineFrameBuffer;
 use spin::Mutex;
+use os_terminal::{DrawTarget, Rgb};
+use limine::request::FramebufferRequest;
 
-struct FrameBuffer {
-    width: u64,
-    height: u64,
-    addr: u64,
-    pitch: u64,
+#[used]
+#[link_section = ".requests"]
+pub static FRAMEBUFFER_REQUEST: FramebufferRequest = FramebufferRequest::new();
+
+pub struct FrameBuffer {
+    width: usize,
+    height: usize,
+    addr: usize,
+    pitch: usize,
 }
 
 impl FrameBuffer {
@@ -20,36 +26,24 @@ impl FrameBuffer {
 
     pub fn from_limine(fb: &LimineFrameBuffer) -> FrameBuffer {
         FrameBuffer {
-            width: fb.width(),
-            height: fb.height(),
-            addr: fb.addr() as u64,
-            pitch: fb.pitch(),
+            width: fb.width() as usize,
+            height: fb.height() as usize,
+            addr: fb.addr() as usize,
+            pitch: fb.pitch() as usize,
         }
     }
 }
 
-pub static display: Mutex<FrameBuffer> = Mutex::new(FrameBuffer::null());
-
-pub fn init(fb: &LimineFrameBuffer) {
-    *display.lock() = FrameBuffer::from_limine(fb);
-}
-
-pub fn display_fill(r: u8, g: u8, b: u8) {
-    let lock = display.lock();
-    for i in 0..(*lock).height {
-        for j in 0..(*lock).width {
-            unsafe {
-                *(((*lock).addr as * mut u8).offset((i * (*lock).pitch + j * 4) as isize) as *mut u32) =
-                    ((r as u32) << 16) + ((g as u32) << 8) + (b as u32);
-            }
-        }
+impl DrawTarget for FrameBuffer {
+    fn size(&self) -> (usize, usize) {
+        (self.width as usize, self.height as usize)
     }
-}
 
-pub fn display_setpixel(x: u64, y: u64, r: u8, g: u8, b: u8) {
-    let lock = display.lock();
-    unsafe {
-        *(((*lock).addr as * mut u8).offset((x * (*lock).pitch + y * 4) as isize) as *mut u32) =
-            ((r as u32) << 16) + ((g as u32) << 8) + (b as u32);
+    #[inline(always)]
+    fn draw_pixel(&mut self, x: usize, y: usize, color: Rgb) {
+        unsafe {
+            *((self.addr as * mut u8).offset((y * self.pitch + x * 4) as isize) as *mut u32) =
+                ((color.0 as u32) << 16) + ((color.1 as u32) << 8) + (color.2 as u32);
+        }
     }
 }

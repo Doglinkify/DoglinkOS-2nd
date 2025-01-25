@@ -50,6 +50,8 @@ extern "C" fn kmain() -> ! {
     init_ioapic(parse_madt());
     show_cpu_info();
     doit();
+    println!("\x1b[31mCOLOR\x1b[0m");
+    DoglinkOS_2nd::blockdev::ramdisk::test();
     hang();
 }
 

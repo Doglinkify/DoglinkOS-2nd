@@ -42,7 +42,13 @@ extern "C" fn kmain() -> ! {
     let hhdm_response = HHDM_REQUEST.get_response().unwrap();
     init_mm(&hhdm_response);
     init_terminal();
-    println!("[INFO] Loading DoglinkOS GNU/MicroFish...");
+//    println!("[INFO] Loading DoglinkOS GNU/MicroFish...");
+    println!(r"  ____                   _   _           _       ___    ____            ____                _
+|  _ \    ___     __ _  | | (_)  _ __   | | __  / _ \  / ___|          |___ \   _ __     __| |
+| | | |  / _ \   / _` | | | | | | '_ \  | |/ / | | | | \___ \   _____    __) | | '_ \   / _` |
+| |_| | | (_) | | (_| | | | | | | | | | |   <  | |_| |  ___) | |_____|  / __/  | | | | | (_| |
+|____/   \___/   \__, | |_| |_| |_| |_| |_|\_\  \___/  |____/          |_____| |_| |_|  \__,_|
+                 |___/");
     init_interrupt();
     init_lapic();
     let rsdp_response = RSDP_REQUEST.get_response().unwrap();

@@ -1,7 +1,11 @@
 use crate::mm::phys_to_virt;
 use crate::println;
-use limine::response::RsdpResponse;
+use limine::request::RsdpRequest;
 use spin::Mutex;
+
+#[used]
+#[link_section = ".requests"]
+static RSDP_REQUEST: RsdpRequest = RsdpRequest::new();
 
 #[derive(Debug, Copy, Clone)]
 #[repr(packed)]
@@ -131,8 +135,9 @@ pub static mcfg: Mutex<MCFG> = Mutex::new(MCFG {
     },
 });
 
-pub unsafe fn init(res: &RsdpResponse) {
+pub unsafe fn init() {
     println!("[INFO] acpi: init() called");
+    let res = RSDP_REQUEST.get_response().unwrap();
     let mut rsdp_lock = rsdp.lock();
     let mut xsdt_lock = xsdt.lock();
     *rsdp_lock = *(res.address() as *const RSDP);

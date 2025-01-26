@@ -19,14 +19,6 @@ use DoglinkOS_2nd::println;
 #[link_section = ".requests"]
 static BASE_REVISION: BaseRevision = BaseRevision::new();
 
-#[used]
-#[link_section = ".requests"]
-static HHDM_REQUEST: HhdmRequest = HhdmRequest::new();
-
-#[used]
-#[link_section = ".requests"]
-static RSDP_REQUEST: RsdpRequest = RsdpRequest::new();
-
 /// Define the stand and end markers for Limine requests.
 #[used]
 #[link_section = ".requests_start_marker"]
@@ -39,10 +31,8 @@ static _END_MARKER: RequestsEndMarker = RequestsEndMarker::new();
 #[no_mangle]
 extern "C" fn kmain() -> ! {
     assert!(BASE_REVISION.is_supported());
-    let hhdm_response = HHDM_REQUEST.get_response().unwrap();
-    init_mm(&hhdm_response);
+    init_mm();
     init_terminal();
-//    println!("[INFO] Loading DoglinkOS GNU/MicroFish...");
     println!(r"  ____                   _   _           _       ___    ____            ____                _
 |  _ \    ___     __ _  | | (_)  _ __   | | __  / _ \  / ___|          |___ \   _ __     __| |
 | | | |  / _ \   / _` | | | | | | '_ \  | |/ / | | | | \___ \   _____    __) | | '_ \   / _` |
@@ -51,13 +41,13 @@ extern "C" fn kmain() -> ! {
                  |___/");
     init_interrupt();
     init_lapic();
-    let rsdp_response = RSDP_REQUEST.get_response().unwrap();
-    unsafe { init_acpi(&rsdp_response) };
+    unsafe { init_acpi() };
     init_ioapic(parse_madt());
     show_cpu_info();
     doit();
     println!("\x1b[31mCOLOR\x1b[0m");
     DoglinkOS_2nd::blockdev::ramdisk::test();
+    DoglinkOS_2nd::mm::show_mmap();
     hang();
 }
 

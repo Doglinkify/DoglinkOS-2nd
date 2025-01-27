@@ -3,5 +3,5 @@ fn main() {
     // Tell cargo to pass the linker script to the linker..
     println!("cargo:rustc-link-arg=-T./kernel/linker-{arch}.ld");
     // ..and to re-run if it changes.
-    println!("cargo:rerun-if-changed=./kernel/linker-{arch}.ld");
+    println!("cargo:rerun-if-changed=linker-{arch}.ld");
 }

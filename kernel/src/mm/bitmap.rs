@@ -8,6 +8,10 @@ impl Bitmap {
         Self(inner)
     }
 
+    pub fn len(&self) -> usize {
+        self.0.len() * 64
+    }
+
     pub fn set(&mut self, pos: usize, value: bool) {
         let byte_pos = pos / 64;
         let bit_pos = pos % 64;

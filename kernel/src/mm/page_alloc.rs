@@ -74,3 +74,36 @@ pub fn init() {
     Lazy::force(&ALLOCATOR_STATE);
 }
 
+pub fn alloc_physical_page() -> Option<u64> {
+    let mut allocator_state = ALLOCATOR_STATE.lock();
+    for i in 0..allocator_state.len() {
+        if allocator_state.get(i) {
+            allocator_state.set(i, false);
+            return Some((i * 4096) as u64);
+        }
+    }
+    None
+}
+
+pub fn dealloc_physical_page(addr: u64) {
+    let index = addr / 4096;
+    ALLOCATOR_STATE.lock().set(index as usize, true);
+}
+
+pub fn test() {
+    let mut addresses = [0u64; 10];
+    for i in 0..10 {
+        addresses[i] = alloc_physical_page().unwrap();
+        println!("Allocation #1-{}: 0x{:x}", i, addresses[i]);
+    }
+    for i in 0..10 {
+        dealloc_physical_page(addresses[i]);
+    }
+    for i in 0..10 {
+        addresses[i] = alloc_physical_page().unwrap();
+        println!("Allocation #2-{}: 0x{:x}", i, addresses[i]);
+    }
+    for i in 0..10 {
+        dealloc_physical_page(addresses[i]);
+    }
+}

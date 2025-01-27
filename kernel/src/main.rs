@@ -45,6 +45,7 @@ extern "C" fn kmain() -> ! {
     show_cpu_info();
 //    doit();
     DoglinkOS_2nd::blockdev::ramdisk::test();
+    DoglinkOS_2nd::mm::page_alloc::test();
     hang();
 }
 

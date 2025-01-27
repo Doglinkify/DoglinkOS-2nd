@@ -9,7 +9,7 @@ use DoglinkOS_2nd::acpi::{init as init_acpi, parse_madt};
 use DoglinkOS_2nd::apic::{io::init as init_ioapic, local::init as init_lapic};
 use DoglinkOS_2nd::cpu::show_cpu_info;
 use DoglinkOS_2nd::int::init as init_interrupt;
-use DoglinkOS_2nd::mm::init as init_mm;
+use DoglinkOS_2nd::mm::{init as init_mm, page_alloc::init as init_mm_ext};
 use DoglinkOS_2nd::pcie::enumrate::doit;
 use DoglinkOS_2nd::println;
 
@@ -37,6 +37,7 @@ extern "C" fn kmain() -> ! {
 | |_| | | (_) | | (_| | | | | | | | | | |   <  | |_| |  ___) | |_____|  / __/  | | | | | (_| |
 |____/   \___/   \__, | |_| |_| |_| |_| |_|\_\  \___/  |____/          |_____| |_| |_|  \__,_|
                  |___/");
+    init_mm_ext();
     init_interrupt();
     init_lapic();
     unsafe { init_acpi() };
@@ -44,7 +45,6 @@ extern "C" fn kmain() -> ! {
     show_cpu_info();
 //    doit();
     DoglinkOS_2nd::blockdev::ramdisk::test();
-    DoglinkOS_2nd::mm::show_mmap();
     hang();
 }
 

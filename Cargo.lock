@@ -6,6 +6,7 @@ version = 4
 name = "DoglinkOS-2nd"
 version = "0.0.2-20250105"
 dependencies = [
+ "bit_field",
  "fatfs 0.4.0",
  "good_memory_allocator",
  "limine",
@@ -558,9 +559,9 @@ checksum = "1261fe7e33c73b354eab43b1273a57c8f967d0391e80353e51f764ac02cf6775"
 
 [[package]]
 name = "os-terminal"
-version = "0.5.8"
+version = "0.5.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02754f7f46625df0ec126555d00ba419c5ad42986742bf182b81d7b3f3ac3f08"
+checksum = "a8484c503c3f36e2e73352ce58e003513db41df228ad1a534f0a238d73c63c70"
 dependencies = [
  "bitflags 2.8.0",
  "noto-sans-mono-bitmap",

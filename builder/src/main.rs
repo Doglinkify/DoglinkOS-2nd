@@ -21,7 +21,7 @@ struct Args {
     whpx: bool,
 
     #[argh(option, short = 'c')]
-    #[argh(default = "4")]
+    #[argh(default = "1")]
     #[argh(description = "number of CPU cores")]
     cores: usize,
 
@@ -45,8 +45,8 @@ fn main() {
         cmd.arg("-machine").arg("q35");
         cmd.arg("-drive").arg(ovmf_config);
         cmd.arg("-m").arg("256m");
-        // cmd.arg("-smp").arg(format!("cores={}", args.cores));
-        // cmd.arg("-cpu").arg("qemu64,+x2apic");
+        cmd.arg("-smp").arg(format!("cores={}", args.cores));
+        cmd.arg("-cpu").arg("qemu64,+x2apic");
 
         // if let Some(backend) = match std::env::consts::OS {
         //     "linux" => Some("pa"),

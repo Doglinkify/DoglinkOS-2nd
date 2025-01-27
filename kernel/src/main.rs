@@ -2,9 +2,7 @@
 #![no_main]
 
 use core::arch::asm;
-use limine::request::{
-    FramebufferRequest, HhdmRequest, RequestsEndMarker, RequestsStartMarker, RsdpRequest,
-};
+use limine::request::{RequestsEndMarker, RequestsStartMarker};
 use limine::BaseRevision;
 use DoglinkOS_2nd::console::init as init_terminal;
 use DoglinkOS_2nd::acpi::{init as init_acpi, parse_madt};
@@ -44,8 +42,7 @@ extern "C" fn kmain() -> ! {
     unsafe { init_acpi() };
     init_ioapic(parse_madt());
     show_cpu_info();
-    doit();
-    println!("\x1b[31mCOLOR\x1b[0m");
+//    doit();
     DoglinkOS_2nd::blockdev::ramdisk::test();
     DoglinkOS_2nd::mm::show_mmap();
     hang();

@@ -45,9 +45,20 @@ pub fn get_entry_type_string(entry: &limine::memory_map::Entry) -> &str {
 
 pub fn show_mmap() {
     let res = MMAP_REQUEST.get_response().unwrap();
+    let mut total_memory = 0u64;
     for entry in res.entries() {
-        println!("Base: 0x{:x}, Length: 0x{:x}, Type: {}",
-                 entry.base, entry.length,
-                 get_entry_type_string(entry));
+        // println!("Base: 0x{:x}, Length: 0x{:x}, Type: {}",
+        //          entry.base, entry.length,
+        //          get_entry_type_string(entry));
+        if entry.entry_type == limine::memory_map::EntryType::USABLE {
+            total_memory += entry.length;
+        }
     }
+    let mut total_memory_level = 0;
+    let mut total_memory_float = total_memory as f32;
+    while total_memory_float > 1024.0 {
+        total_memory_float /= 1024.0;
+        total_memory_level += 1;
+    }
+    println!("Total {} {} usable", total_memory_float, ["B", "KiB", "MiB", "GiB"][total_memory_level]);
 }

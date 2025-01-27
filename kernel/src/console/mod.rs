@@ -12,6 +12,7 @@ pub static TERMINAL: Lazy<Mutex<Terminal<FrameBuffer>>> = Lazy::new(|| {
     let framebuffer = framebuffer_response.framebuffers().next().unwrap();
     let mut terminal = Terminal::new(FrameBuffer::from_limine(&framebuffer));
     terminal.set_font_manager(Box::new(BitmapFont));
+    terminal.set_history_size(200);
     Mutex::new(terminal)
 });
 

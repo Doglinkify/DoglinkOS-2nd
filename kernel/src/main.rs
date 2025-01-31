@@ -43,7 +43,7 @@ extern "C" fn kmain() -> ! {
     unsafe { init_acpi() };
     init_ioapic(parse_madt());
     show_cpu_info();
-//    doit();
+    doit();
     DoglinkOS_2nd::blockdev::ramdisk::test();
     DoglinkOS_2nd::mm::page_alloc::test();
     hang();

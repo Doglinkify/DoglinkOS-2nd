@@ -1,12 +1,12 @@
 use crate::acpi::mcfg;
 use crate::mm::phys_to_virt;
-use crate::println;
+use crate::{print, println};
 use spin::Mutex;
 
 pub static pcie_mmio_base: Mutex<u64> = Mutex::new(0);
 
 #[derive(Debug)]
-#[repr(packed)]
+#[repr(C)]
 pub struct PCIConfigSpace {
     vendor_id: u16,
     device_id: u16,
@@ -20,6 +20,7 @@ pub struct PCIConfigSpace {
     latency_timer: u8,
     header_type: u8,
     BIST: u8,
+    bar: [u32; 6],
     // TODO
 }
 
@@ -47,6 +48,11 @@ pub fn check(bus: u8, device: u8, function: u8) -> bool {
             vendor_id,
             device_id
         );
+        print!("PROG_IF={} ", config.prog_if);
+        for i in 0..6 {
+            print!(" BAR{}={:x}", i, config.bar[i]);
+        }
+        println!();
     }
     config.vendor_id != 65535 && config.header_type & 0x80 == 0x80
 }

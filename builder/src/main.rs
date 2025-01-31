@@ -25,9 +25,9 @@ struct Args {
     #[argh(description = "number of CPU cores")]
     cores: usize,
 
-    #[argh(switch, short = 's')]
-    #[argh(description = "redirect serial to stdio")]
-    serial: bool,
+    #[argh(switch, short = 'v')]
+    #[argh(description = "use vnc")]
+    vnc: bool,
 }
 
 fn main() {
@@ -71,8 +71,8 @@ fn main() {
         if args.whpx {
             cmd.arg("-accel").arg("whpx");
         }
-        if args.serial {
-            cmd.arg("-serial").arg("stdio");
+        if args.vnc {
+            cmd.arg("-vnc").arg(":1");
         }
 
         let mut child = cmd.spawn().unwrap();

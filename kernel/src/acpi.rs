@@ -39,7 +39,7 @@ pub struct ACPI_table_header {
 #[repr(packed)]
 pub struct XSDT {
     header: ACPI_table_header,
-    pointers: [u64; 16], // TODO
+    pointers: [u64; 32], // TODO
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -93,7 +93,7 @@ pub static xsdt: Mutex<XSDT> = Mutex::new(XSDT {
         creator_id: 0,
         creator_revison: 0,
     },
-    pointers: [0; 16],
+    pointers: [0; 32],
 });
 
 pub static madt: Mutex<MADT> = Mutex::new(MADT {
@@ -142,7 +142,9 @@ pub unsafe fn init() {
     let mut xsdt_lock = xsdt.lock();
     *rsdp_lock = *(res.address() as *const RSDP);
     *xsdt_lock = *(phys_to_virt((*rsdp_lock).xsdt_addr) as *const XSDT);
-    for i in 0..16 {
+    let xsdt_length = xsdt_lock.header.length;
+    println!("[DEBUG] acpi: xsdt length {}", xsdt_length);
+    for i in 0..32 {
         if (*xsdt_lock).pointers[i] == 0 {
             break;
         }
@@ -162,6 +164,8 @@ pub fn parse_madt() -> u64 {
     println!("[INFO] acpi: parse_madt() called");
     let mut res: u64 = 0;
     let madt_lock = madt.lock();
+    let madt_length = madt_lock.header.length;
+    println!("[DEBUG] acpi: madt length {}", madt_length);
     let mut range = &((*madt_lock).var_marker)[..((*madt_lock).header.length as usize - 44)];
     // println!("{p:?} {edge:?}");
     while range != &[] {

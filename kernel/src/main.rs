@@ -10,7 +10,7 @@ use DoglinkOS_2nd::apic::{io::init as init_ioapic, local::init as init_lapic};
 use DoglinkOS_2nd::cpu::show_cpu_info;
 use DoglinkOS_2nd::int::init as init_interrupt;
 use DoglinkOS_2nd::mm::{init as init_mm, page_alloc::init as init_mm_ext};
-use DoglinkOS_2nd::pcie::enumrate::doit;
+use DoglinkOS_2nd::pcie::enumrate::{init as init_pcie, doit};
 use DoglinkOS_2nd::println;
 
 #[used]
@@ -42,8 +42,16 @@ extern "C" fn kmain() -> ! {
     init_lapic();
     unsafe { init_acpi() };
     init_ioapic(parse_madt());
+    init_pcie();
     show_cpu_info();
-    doit();
+    doit(|bus, device, function, config| {
+        let vendor_id = config.vendor_id;
+        let device_id = config.device_id;
+        println!("{:02x}:{:02x}.{} {:02x}{:02x}: {:04x}:{:04x}",
+            bus, device, function,
+            config.class_code, config.subclass,
+            vendor_id, device_id);
+    });
     DoglinkOS_2nd::blockdev::ramdisk::test();
     DoglinkOS_2nd::mm::page_alloc::test();
     hang();

@@ -8,19 +8,19 @@ pub static pcie_mmio_base: Mutex<u64> = Mutex::new(0);
 #[derive(Debug)]
 #[repr(C)]
 pub struct PCIConfigSpace {
-    vendor_id: u16,
-    device_id: u16,
-    command: u16,
-    status: u16,
-    revision_id: u8,
-    prog_if: u8,
-    subclass: u8,
-    class_code: u8,
-    cache_line_size: u8,
-    latency_timer: u8,
-    header_type: u8,
-    BIST: u8,
-    bar: [u32; 6],
+    pub vendor_id: u16,
+    pub device_id: u16,
+    pub command: u16,
+    pub status: u16,
+    pub revision_id: u8,
+    pub prog_if: u8,
+    pub subclass: u8,
+    pub class_code: u8,
+    pub cache_line_size: u8,
+    pub latency_timer: u8,
+    pub header_type: u8,
+    pub BIST: u8,
+    pub bar: [u32; 6],
     // TODO
 }
 
@@ -33,38 +33,24 @@ pub fn get_config_space(bus: u8, device: u8, function: u8) -> &'static PCIConfig
     }
 }
 
-pub fn check(bus: u8, device: u8, function: u8) -> bool {
+pub fn check<F>(bus: u8, device: u8, function: u8, hook: &F) -> bool where F: Fn(u8, u8, u8, &PCIConfigSpace) {
     let config = get_config_space(bus, device, function);
     if config.vendor_id != 65535 {
-        let vendor_id = config.vendor_id;
-        let device_id = config.device_id;
-        println!(
-            "{:02x}:{:02x}.{}: {:02x}{:02x}: {:04x}:{:04x}",
-            bus,
-            device,
-            function,
-            config.class_code,
-            config.subclass,
-            vendor_id,
-            device_id
-        );
-        print!("PROG_IF={} ", config.prog_if);
-        for i in 0..6 {
-            print!(" BAR{}={:x}", i, config.bar[i]);
-        }
-        println!();
+        hook(bus, device, function, config);
     }
     config.vendor_id != 65535 && config.header_type & 0x80 == 0x80
 }
 
-pub fn doit() {
-    println!("PCI enumerating result:");
+pub fn init() {
     *pcie_mmio_base.lock() = phys_to_virt((*mcfg.lock()).alloc.base_addr);
+}
+
+pub fn doit<F>(hook: F) where F: Fn(u8, u8, u8, &PCIConfigSpace) {
     for bus in 0..=255 {
         for device in 0..32 {
-            if check(bus, device, 0) {
+            if check(bus, device, 0, &hook) {
                 for function in 1..8 {
-                    check(bus, device, function);
+                    check(bus, device, function, &hook);
                 }
             }
         }

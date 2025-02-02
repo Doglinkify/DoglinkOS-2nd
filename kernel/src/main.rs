@@ -47,11 +47,14 @@ extern "C" fn kmain() -> ! {
     doit(|bus, device, function, config| {
         let vendor_id = config.vendor_id;
         let device_id = config.device_id;
-        println!("{:02x}:{:02x}.{} {:02x}{:02x}: {:04x}:{:04x}",
+        println!("[INFO] kmain: found PCIe device: {:02x}:{:02x}.{} {:02x}{:02x}: {:04x}:{:04x}",
             bus, device, function,
             config.class_code, config.subclass,
             vendor_id, device_id);
     });
+    let mut cnt = 0;
+    doit(|_, _, _, _| cnt += 1);
+    println!("[INFO] kmain: total {cnt} PCIe devices");
     DoglinkOS_2nd::blockdev::ramdisk::test();
     DoglinkOS_2nd::mm::page_alloc::test();
     hang();

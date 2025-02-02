@@ -111,7 +111,7 @@ pub fn test() {
     file_content!("text.txt", b"ADG");
     for f in root_dir.iter() {
         let e = f.unwrap();
-        println!("Name: {}, Size: {}", e.file_name(), e.len());
+        println!("[DEBUG] ramdisk: Name: {}, Size: {}", e.file_name(), e.len());
     }
 //    println!("{:#?}", root_dir);
 }

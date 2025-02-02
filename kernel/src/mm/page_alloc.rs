@@ -94,14 +94,14 @@ pub fn test() {
     let mut addresses = [0u64; 10];
     for i in 0..10 {
         addresses[i] = alloc_physical_page().unwrap();
-        println!("Allocation #1-{}: 0x{:x}", i, addresses[i]);
+        println!("[DEBUG] page_alloc: Allocation #1-{}: 0x{:x}", i, addresses[i]);
     }
     for i in 0..10 {
         dealloc_physical_page(addresses[i]);
     }
     for i in 0..10 {
         addresses[i] = alloc_physical_page().unwrap();
-        println!("Allocation #2-{}: 0x{:x}", i, addresses[i]);
+        println!("[DEBUG] page_alloc: Allocation #2-{}: 0x{:x}", i, addresses[i]);
     }
     for i in 0..10 {
         dealloc_physical_page(addresses[i]);

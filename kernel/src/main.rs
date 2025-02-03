@@ -56,6 +56,7 @@ extern "C" fn kmain() -> ! {
     doit(|_, _, _, _| cnt += 1);
     println!("[INFO] kmain: total {cnt} PCIe devices");
     DoglinkOS_2nd::blockdev::ramdisk::test();
+    DoglinkOS_2nd::blockdev::ahci::init();
     DoglinkOS_2nd::mm::page_alloc::test();
     hang();
 }

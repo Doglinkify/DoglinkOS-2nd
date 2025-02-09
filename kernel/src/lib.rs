@@ -2,6 +2,7 @@
 #![feature(abi_x86_interrupt)]
 #![feature(slice_take)]
 #![feature(array_ptr_get)]
+#![feature(box_as_ptr)]
 
 extern crate alloc;
 pub mod acpi;

@@ -1,5 +1,3 @@
-#![feature(abi_x86_interrupt)]
-
 use crate::{print, println};
 use x86_64::structures::idt::HandlerFunc;
 use x86_64::structures::idt::InterruptDescriptorTable;

@@ -52,6 +52,8 @@ static ALLOCATOR_STATE: Lazy<Mutex<Bitmap>> = Lazy::new(|| {
     let bitmap_end_page = bitmap_start_page + bitmap_size.div_ceil(4096);
     bitmap.set_range(bitmap_start_page as usize, bitmap_end_page as usize, false);
 
+    bitmap.set_range(16, 2064, false); // kernel heap
+
     Mutex::new(bitmap)
 });
 

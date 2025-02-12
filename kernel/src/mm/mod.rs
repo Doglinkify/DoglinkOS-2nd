@@ -1,5 +1,6 @@
 pub mod bitmap;
 pub mod page_alloc;
+pub mod paging;
 
 use limine::request::HhdmRequest;
 use spin::Mutex;

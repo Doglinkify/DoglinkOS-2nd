@@ -11,6 +11,7 @@ use DoglinkOS_2nd::cpu::show_cpu_info;
 use DoglinkOS_2nd::int::init as init_interrupt;
 use DoglinkOS_2nd::mm::{init as init_mm, page_alloc::init as init_mm_ext};
 use DoglinkOS_2nd::pcie::enumrate::{init as init_pcie, doit};
+use DoglinkOS_2nd::task::{reset_gdt, init as init_task};
 use DoglinkOS_2nd::println;
 
 #[used]
@@ -27,6 +28,7 @@ static _START_MARKER: RequestsStartMarker = RequestsStartMarker::new();
 static _END_MARKER: RequestsEndMarker = RequestsEndMarker::new();
 
 #[no_mangle]
+#[allow(named_asm_labels)]
 extern "C" fn kmain() -> ! {
     assert!(BASE_REVISION.is_supported());
     init_mm();
@@ -38,6 +40,7 @@ extern "C" fn kmain() -> ! {
 |____/   \___/   \__, | |_| |_| |_| |_| |_|\_\  \___/  |____/          |_____| |_| |_|  \__,_|
                  |___/");
     init_mm_ext();
+    reset_gdt();
     init_interrupt();
     init_lapic();
     unsafe { init_acpi() };
@@ -58,6 +61,7 @@ extern "C" fn kmain() -> ! {
     DoglinkOS_2nd::blockdev::ramdisk::test();
     DoglinkOS_2nd::blockdev::ahci::init();
     DoglinkOS_2nd::mm::page_alloc::test();
+    init_task();
     hang();
 }
 

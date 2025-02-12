@@ -5,6 +5,7 @@ use x86_64::structures::idt::HandlerFunc;
 use x86_64::structures::idt::InterruptDescriptorTable;
 use x86_64::structures::idt::InterruptStackFrame;
 use x86_64::structures::idt::PageFaultErrorCode;
+use x86_64::registers::control::Cr2;
 use spin::{Lazy, Mutex};
 
 pub static IDT: Lazy<InterruptDescriptorTable> = Lazy::new(|| {
@@ -14,6 +15,7 @@ pub static IDT: Lazy<InterruptDescriptorTable> = Lazy::new(|| {
     temp[34].set_handler_fn(handler3);
     temp[36].set_handler_fn(handler4);
     temp.page_fault.set_handler_fn(handler5);
+    temp.general_protection_fault.set_handler_fn(handler6);
     temp
 });
 
@@ -48,7 +50,12 @@ pub extern "x86-interrupt" fn handler4(_: InterruptStackFrame) {
     crate::apic::local::eoi();
 }
 
-pub extern "x86-interrupt" fn handler5(_: InterruptStackFrame, _1: PageFaultErrorCode) {
-    println!("page fault");
+pub extern "x86-interrupt" fn handler5(_: InterruptStackFrame, code: PageFaultErrorCode) {
+    println!("page fault, addr: {:?}, code: {:?}", Cr2::read().unwrap(), code);
+    loop{}
+}
+
+pub extern "x86-interrupt" fn handler6(_: InterruptStackFrame, _1: u64) {
+    println!("general protection fault");
     loop{}
 }

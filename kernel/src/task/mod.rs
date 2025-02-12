@@ -58,6 +58,5 @@ pub fn init() {
             "cd:",
             out("rax") _,
         );
-        loop{}
     }
 }

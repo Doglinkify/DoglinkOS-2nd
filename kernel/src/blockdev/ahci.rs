@@ -56,7 +56,7 @@ pub fn get_disks(address: u64) -> Vec<Disk> {
             let ipm = (ssts >> 8) & 0x0f;
             let det = ssts & 0x0f;
             if det != 3 || ipm != 1 {
-                println!("[INFO] ahci: no drive found at port {}", i);
+                //println!("[INFO] ahci: no drive found at port {}", i);
             } else {
                 match port.signature {
                     0x00000101 => println!("[INFO] ahci: SATA drive found at port {}", i),

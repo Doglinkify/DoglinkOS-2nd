@@ -1,5 +1,4 @@
 use limine::framebuffer::Framebuffer as LimineFrameBuffer;
-use spin::Mutex;
 use os_terminal::{DrawTarget, Rgb};
 use limine::request::FramebufferRequest;
 

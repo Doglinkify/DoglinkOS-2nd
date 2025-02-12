@@ -1,12 +1,9 @@
-#![feature(abi_x86_interrupt)]
-
-use crate::{print, println};
-use x86_64::structures::idt::HandlerFunc;
+use crate::println;
 use x86_64::structures::idt::InterruptDescriptorTable;
 use x86_64::structures::idt::InterruptStackFrame;
 use x86_64::structures::idt::PageFaultErrorCode;
 use x86_64::registers::control::Cr2;
-use spin::{Lazy, Mutex};
+use spin::Lazy;
 
 pub static IDT: Lazy<InterruptDescriptorTable> = Lazy::new(|| {
     let mut temp = InterruptDescriptorTable::new();

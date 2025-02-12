@@ -1,7 +1,6 @@
 #![no_std]
 #![no_main]
 
-use core::arch::asm;
 use limine::request::{RequestsEndMarker, RequestsStartMarker};
 use limine::BaseRevision;
 use DoglinkOS_2nd::mm::{init as init_mm, page_alloc::init as init_mm_ext};

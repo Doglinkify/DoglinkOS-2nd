@@ -23,7 +23,7 @@ pub struct RSDP {
 
 #[derive(Debug, Copy, Clone)]
 #[repr(packed)]
-pub struct ACPI_table_header {
+pub struct AcpiTableHeader {
     signature: [u8; 4],
     length: u32,
     revision: u8,
@@ -38,14 +38,14 @@ pub struct ACPI_table_header {
 #[derive(Debug, Copy, Clone)]
 #[repr(packed)]
 pub struct XSDT {
-    header: ACPI_table_header,
+    header: AcpiTableHeader,
     pointers: [u64; 32], // TODO
 }
 
 #[derive(Debug, Copy, Clone)]
 #[repr(packed)]
 pub struct MADT {
-    header: ACPI_table_header,
+    header: AcpiTableHeader,
     local_apic_addr: u32,
     flags: u32,
     var_marker: [u8; 1024], // to clone the rest of the MADT
@@ -53,7 +53,7 @@ pub struct MADT {
 
 #[derive(Debug, Copy, Clone)]
 #[repr(packed)]
-pub struct PCIE_CFG_ALLOC {
+pub struct PCIeCfgAlloc {
     pub base_addr: u64,
     pub pci_segment_group_number: u16,
     pub start_pci_bus_number: u8,
@@ -64,9 +64,9 @@ pub struct PCIE_CFG_ALLOC {
 #[derive(Debug, Copy, Clone)]
 #[repr(packed)]
 pub struct MCFG {
-    header: ACPI_table_header,
+    header: AcpiTableHeader,
     reserved: u64,
-    pub alloc: PCIE_CFG_ALLOC,
+    pub alloc: PCIeCfgAlloc,
 }
 
 pub static rsdp: Mutex<RSDP> = Mutex::new(RSDP {
@@ -82,7 +82,7 @@ pub static rsdp: Mutex<RSDP> = Mutex::new(RSDP {
 });
 
 pub static xsdt: Mutex<XSDT> = Mutex::new(XSDT {
-    header: ACPI_table_header {
+    header: AcpiTableHeader {
         signature: [0; 4],
         length: 0,
         revision: 0,
@@ -97,7 +97,7 @@ pub static xsdt: Mutex<XSDT> = Mutex::new(XSDT {
 });
 
 pub static madt: Mutex<MADT> = Mutex::new(MADT {
-    header: ACPI_table_header {
+    header: AcpiTableHeader {
         signature: [0; 4],
         length: 0,
         revision: 0,
@@ -114,7 +114,7 @@ pub static madt: Mutex<MADT> = Mutex::new(MADT {
 });
 
 pub static mcfg: Mutex<MCFG> = Mutex::new(MCFG {
-    header: ACPI_table_header {
+    header: AcpiTableHeader {
         signature: [0; 4],
         length: 0,
         revision: 0,
@@ -126,7 +126,7 @@ pub static mcfg: Mutex<MCFG> = Mutex::new(MCFG {
         creator_revison: 0,
     },
     reserved: 0,
-    alloc: PCIE_CFG_ALLOC {
+    alloc: PCIeCfgAlloc {
         base_addr: 0,
         pci_segment_group_number: 0,
         start_pci_bus_number: 0,
@@ -148,13 +148,13 @@ pub unsafe fn init() {
         if (*xsdt_lock).pointers[i] == 0 {
             break;
         }
-        let head = &*(phys_to_virt((*xsdt_lock).pointers[i]) as *const ACPI_table_header);
+        let head = &*(phys_to_virt((*xsdt_lock).pointers[i]) as *const AcpiTableHeader);
         if head.signature == [65, 80, 73, 67] {
             // "APIC"
-            *madt.lock() = *(head as *const ACPI_table_header as *const MADT);
+            *madt.lock() = *(head as *const AcpiTableHeader as *const MADT);
         } else if head.signature == [77, 67, 70, 71] {
             // "MCFG"
-            *mcfg.lock() = *(head as *const ACPI_table_header as *const MCFG);
+            *mcfg.lock() = *(head as *const AcpiTableHeader as *const MCFG);
         }
     }
     println!("[INFO] acpi: it didn't crash!");

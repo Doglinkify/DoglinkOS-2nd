@@ -1,6 +1,5 @@
 use crate::acpi::mcfg;
 use crate::mm::phys_to_virt;
-use crate::{print, println};
 use spin::Mutex;
 
 pub static pcie_mmio_base: Mutex<u64> = Mutex::new(0);

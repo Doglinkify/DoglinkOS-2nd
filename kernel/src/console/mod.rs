@@ -1,6 +1,5 @@
 mod framebuffer;
 
-use limine::framebuffer::Framebuffer as LimineFrameBuffer;
 use spin::{Lazy, Mutex};
 use os_terminal::{Terminal, font::BitmapFont};
 use framebuffer::{FrameBuffer, FRAMEBUFFER_REQUEST};

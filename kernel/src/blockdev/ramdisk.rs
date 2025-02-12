@@ -103,7 +103,7 @@ pub fn test() {
         ($name:expr, $content:expr) => {
             {
                 let mut file = root_dir.create_file($name).expect("cre");
-                file.write_all($content);
+                file.write_all($content).unwrap();
             }
         }
     }

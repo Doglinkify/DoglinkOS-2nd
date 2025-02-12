@@ -77,7 +77,7 @@ pub fn init() {
         if config.class_code == 0x01 && config.subclass == 0x06 {
             let bar = config.bar[5];
             let address = bar & 0xfffffff0;
-            get_disks(phys_to_virt(address as u64));
+            ahci.extend(get_disks(phys_to_virt(address as u64)));
         }
     });
 }

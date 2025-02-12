@@ -16,6 +16,7 @@ pub static IDT: Lazy<InterruptDescriptorTable> = Lazy::new(|| {
     temp[36].set_handler_fn(handler4);
     temp.page_fault.set_handler_fn(handler5);
     temp.general_protection_fault.set_handler_fn(handler6);
+    temp.double_fault.set_handler_fn(handler7);
     temp
 });
 
@@ -50,12 +51,16 @@ pub extern "x86-interrupt" fn handler4(_: InterruptStackFrame) {
     crate::apic::local::eoi();
 }
 
-pub extern "x86-interrupt" fn handler5(_: InterruptStackFrame, code: PageFaultErrorCode) {
-    println!("page fault, addr: {:?}, code: {:?}", Cr2::read().unwrap(), code);
+pub extern "x86-interrupt" fn handler5(f: InterruptStackFrame, code: PageFaultErrorCode) {
+    println!("page fault, caused by instruction at {:?}, addr: {:?}, code: {:?}", f.instruction_pointer, Cr2::read().unwrap(), code);
     loop{}
 }
 
-pub extern "x86-interrupt" fn handler6(_: InterruptStackFrame, _1: u64) {
-    println!("general protection fault");
+pub extern "x86-interrupt" fn handler6(f: InterruptStackFrame, c: u64) {
+    println!("general protection fault, caused by instruction at {:?}, code: {}", f.instruction_pointer, c);
+    loop{}
+}
+
+pub extern "x86-interrupt" fn handler7(f: InterruptStackFrame, _: u64) -> ! {
     loop{}
 }

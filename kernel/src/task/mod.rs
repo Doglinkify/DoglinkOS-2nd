@@ -30,6 +30,7 @@ pub fn reset_gdt() {
     }
 }
 
+#[allow(named_asm_labels)]
 pub fn init() {
     x86_64::instructions::interrupts::disable();
     unsafe {
@@ -42,14 +43,21 @@ pub fn init() {
         ).unwrap();
         crate::println!("will load cr3 with {:?} {:?}", addr, flags);
         Cr3::write(addr, flags);
-//        CS::set_reg(SegmentSelector::new(3, PrivilegeLevel::Ring3));
         DS::set_reg(SegmentSelector::new(4, PrivilegeLevel::Ring3));
-//        SS::set_reg(SegmentSelector::new(4, PrivilegeLevel::Ring3));
         ES::set_reg(SegmentSelector::new(4, PrivilegeLevel::Ring3));
         FS::set_reg(SegmentSelector::new(4, PrivilegeLevel::Ring3));
         GS::set_reg(SegmentSelector::new(4, PrivilegeLevel::Ring3));
-        unsafe {
-            *(0xdeadbeef as *mut u64) = 114514;
-        }
+        asm!(
+            "mov rax, rsp",
+            "push 0x23",
+            "push rax",
+            "pushfq",
+            "push 0x1b",
+            "push offset cd",
+            "iretq",
+            "cd:",
+            out("rax") _,
+        );
+        loop{}
     }
 }

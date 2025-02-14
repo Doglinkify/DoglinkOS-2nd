@@ -13,7 +13,7 @@ use x86_64::addr::VirtAddr;
 
 pub static TSS: Lazy<TaskStateSegment> = Lazy::new(|| {
     let mut tss = TaskStateSegment::new();
-    let rsp0_pa = crate::mm::page_alloc::alloc_physical_page().unwrap();
+    let rsp0_pa = crate::mm::page_alloc::alloc_physical_page().unwrap() + 0x1000;
     tss.privilege_stack_table[0] = VirtAddr::new(crate::mm::phys_to_virt(rsp0_pa));
     tss
 });

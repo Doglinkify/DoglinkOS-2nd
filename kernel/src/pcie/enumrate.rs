@@ -1,4 +1,3 @@
-use crate::acpi::mcfg;
 use crate::mm::phys_to_virt;
 use spin::Mutex;
 
@@ -41,7 +40,7 @@ pub fn check<F>(bus: u8, device: u8, function: u8, mut hook: F) -> bool where F:
 }
 
 pub fn init() {
-    *pcie_mmio_base.lock() = phys_to_virt((*mcfg.lock()).alloc.base_addr);
+    *pcie_mmio_base.lock() = phys_to_virt(crate::acpi::parse_mcfg());
 }
 
 pub fn doit<F>(mut hook: F) where F: FnMut(u8, u8, u8, &PCIConfigSpace) {

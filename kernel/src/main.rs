@@ -8,7 +8,7 @@ use DoglinkOS_2nd::console::init as init_terminal;
 use DoglinkOS_2nd::task::{reset_gdt, init as init_task};
 use DoglinkOS_2nd::int::init as init_interrupt;
 use DoglinkOS_2nd::apic::{io::init as init_ioapic, local::init as init_lapic};
-use DoglinkOS_2nd::acpi::{init as init_acpi, parse_madt};
+use DoglinkOS_2nd::acpi::parse_madt;
 use DoglinkOS_2nd::pcie::enumrate::{init as init_pcie, doit};
 use DoglinkOS_2nd::cpu::show_cpu_info;
 use DoglinkOS_2nd::blockdev::ramdisk::test as test_ramdisk;
@@ -45,7 +45,6 @@ extern "C" fn kmain() -> ! {
     reset_gdt();
     init_interrupt();
     init_lapic();
-    unsafe { init_acpi() };
     init_ioapic(parse_madt());
     init_pcie();
     init_ahci();

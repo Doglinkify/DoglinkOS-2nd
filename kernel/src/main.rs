@@ -79,7 +79,7 @@ extern "C" fn kmain() -> ! {
                  in("rax") 2, // sys_fork
                  out("rcx") fork_result,
             );
-            if (fork_result == 0) {
+            if fork_result == 0 {
                 loop {
                     asm!(
                         "int 0x80",

@@ -55,16 +55,53 @@ extern "C" fn kmain() -> ! {
     test_page_alloc();
     init_task();
     println!("[INFO] kmain: all things ok, let's start!");
+    let mut fork_result: u64;
     unsafe {
         asm!(
             "int 0x80",
-            in("rax") 1,
-            in("rdi") 0,
-            in("rsi") "hello, syscall".as_ptr(),
-            in("rcx") "hello, syscall".len(),
+            in("rax") 2, // sys_fork
+            out("rcx") fork_result,
         );
+        println!("fork() returns {fork_result}");
+        if fork_result == 0 {
+            loop {
+                asm!(
+                    "int 0x80",
+                    in("rax") 1, // sys_write
+                    in("rdi") 1, // stdout
+                    in("rsi") "process 1: hello\n".as_ptr(),
+                    in("rcx") "process 1: hello\n".len(),
+                );
+            }
+        } else {
+            asm!(
+                "int 0x80",
+                 in("rax") 2, // sys_fork
+                 out("rcx") fork_result,
+            );
+            if (fork_result == 0) {
+                loop {
+                    asm!(
+                        "int 0x80",
+                         in("rax") 1, // sys_write
+                         in("rdi") 0, // stderr
+                         in("rsi") "process 2: hello\n".as_ptr(),
+                         in("rcx") "process 2: hello\n".len(),
+                    );
+                }
+            } else {
+                loop {
+                    asm!(
+                        "int 0x80",
+                        in("rax") 1, // sys_write
+                        in("rdi") 1, // stdout
+                        in("rsi") "process 0: hello\n".as_ptr(),
+                        in("rcx") "process 0: hello\n".len(),
+                    );
+                }
+            }
+        }
     }
-    hang();
 }
 
 fn show_pcie_info() {

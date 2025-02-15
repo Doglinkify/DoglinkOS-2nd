@@ -1,4 +1,5 @@
 use crate::println;
+use core::arch::naked_asm;
 use x86_64::structures::idt::InterruptDescriptorTable;
 use x86_64::structures::idt::InterruptStackFrame;
 use x86_64::structures::idt::PageFaultErrorCode;
@@ -24,9 +25,46 @@ pub fn init() {
     println!("[INFO] interrupt: it didn't crash!");
 }
 
+#[naked]
 pub extern "x86-interrupt" fn handler1(_: InterruptStackFrame) {
-    crate::print!(".");
-    crate::apic::local::eoi();
+    unsafe {
+        naked_asm!(
+            "push r15",
+            "push r14",
+            "push r13",
+            "push r12",
+            "push r11",
+            "push r10",
+            "push r9",
+            "push r8",
+            "push rdi",
+            "push rbp",
+            "push rsi",
+            "push rdx",
+            "push rcx",
+            "push rbx",
+            "push rax",
+            "mov rdi, rsp",
+            "call {}",
+            "pop rax",
+            "pop rbx",
+            "pop rcx",
+            "pop rdx",
+            "pop rsi",
+            "pop rbp",
+            "pop rdi",
+            "pop r8",
+            "pop r9",
+            "pop r10",
+            "pop r11",
+            "pop r12",
+            "pop r13",
+            "pop r14",
+            "pop r15",
+            "iretq",
+            sym crate::task::sched::schedule,
+        )
+    }
 }
 
 pub extern "x86-interrupt" fn handler2(_: InterruptStackFrame) {

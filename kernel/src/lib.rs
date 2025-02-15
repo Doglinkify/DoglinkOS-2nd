@@ -2,6 +2,7 @@
 #![feature(abi_x86_interrupt)]
 #![feature(slice_take)]
 #![feature(array_ptr_get)]
+#![feature(naked_functions)]
 #![allow(non_snake_case)]
 #![allow(dead_code)]
 #![allow(non_upper_case_globals)]

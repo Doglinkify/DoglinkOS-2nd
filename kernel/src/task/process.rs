@@ -6,33 +6,38 @@ use x86_64::registers::control::Cr3;
 use x86_64::addr::PhysAddr;
 use crate::mm::page_alloc::alloc_physical_page;
 use crate::mm::phys_to_virt;
+use core::sync::atomic::Ordering;
 
-#[derive(Default)]
+#[derive(Default, Copy, Clone, Debug)]
 #[repr(C)]
 pub struct ProcessContext {
-    rax: u64,
-    rbx: u64,
-    rcx: u64,
-    rdx: u64,
-    rsi: u64,
-    rdi: u64,
-    rsp: u64,
-    rbp: u64,
-    r8: u64,
-    r9: u64,
-    r10: u64,
-    r11: u64,
-    r12: u64,
-    r13: u64,
-    r14: u64,
-    r15: u64,
-    rip: u64,
-    rflags: u64,
+    pub rax: u64,
+    pub rbx: u64,
+    pub rcx: u64,
+    pub rdx: u64,
+    pub rsi: u64,
+    pub rbp: u64,
+    pub rdi: u64,
+    pub r8: u64,
+    pub r9: u64,
+    pub r10: u64,
+    pub r11: u64,
+    pub r12: u64,
+    pub r13: u64,
+    pub r14: u64,
+    pub r15: u64,
+    // InterruptStackFrameValue
+    pub rip: u64,
+    pub cs: u64,
+    pub rflags: u64,
+    pub rsp: u64,
+    pub ss: u64,
 }
 
 pub struct Process<'a> {
     pub page_table: OffsetPageTable<'a>,
     pub context: ProcessContext,
+    pub tm: u64,
 }
 
 impl<'a> Process<'a> {
@@ -40,6 +45,7 @@ impl<'a> Process<'a> {
         Process {
             page_table: Self::new_p4_table(),
             context: ProcessContext::default(),
+            tm: 0,
         }
     }
 
@@ -74,6 +80,33 @@ impl<'a> Process<'a> {
             Self::r_copy(new_src, new_table, level - 1);
         }
     }
+
+    pub fn copy_process(&self, context: *mut ProcessContext, new_tid: usize) -> Self {
+        let p4t_pa = alloc_physical_page().unwrap();
+        let p4t_va = phys_to_virt(p4t_pa);
+        let p4t = unsafe { &mut *(p4t_va as *mut PageTable) };
+        Self::r_copy(self.page_table.level_4_table(), p4t, 4);
+        let mut new_context = unsafe { *context };
+        new_context.rcx = 0;
+        unsafe {
+            (*context).rcx = new_tid as u64;
+        }
+        Self {
+            page_table: unsafe { OffsetPageTable::new(p4t, x86_64::addr::VirtAddr::new(phys_to_virt(0))) },
+            context: new_context,
+            tm: 0,
+        }
+    }
 }
 
 pub static TASKS: Mutex<[Option<Process>; 64]> = Mutex::new([const { None }; 64]);
+
+pub fn do_fork(context: *mut ProcessContext) {
+    static mut next_tid: usize = 0;
+    unsafe {
+        next_tid += 1;
+    }
+    let mut tasks = TASKS.lock();
+    let new_process = tasks[super::sched::CURRENT_TASK_ID.load(Ordering::Relaxed)].as_ref().unwrap().copy_process(context, unsafe { next_tid });
+    tasks[unsafe { next_tid }] = Some(new_process);
+}

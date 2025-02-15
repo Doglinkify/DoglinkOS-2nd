@@ -1,29 +1,12 @@
-use core::arch::asm;
+use core::arch::naked_asm;
 use crate::println;
 use x86_64::structures::idt::InterruptStackFrame;
+use crate::task::process::ProcessContext as SyscallStackFrame;
 
-#[derive(Copy, Clone)]
-#[repr(C)]
-pub struct SyscallStackFrame {
-    rax: u64,
-    rbx: u64,
-    rcx: u64,
-    rdx: u64,
-    rsi: u64,
-    rdi: u64,
-    r8: u64,
-    r9: u64,
-    r10: u64,
-    r11: u64,
-    r12: u64,
-    r13: u64,
-    r14: u64,
-    r15: u64,
-}
-
+#[naked]
 pub extern "x86-interrupt" fn syscall_handler(_: InterruptStackFrame) {
     unsafe {
-        asm!(
+        naked_asm!(
             "push r15",
             "push r14",
             "push r13",
@@ -33,6 +16,7 @@ pub extern "x86-interrupt" fn syscall_handler(_: InterruptStackFrame) {
             "push r9",
             "push r8",
             "push rdi",
+            "push rbp",
             "push rsi",
             "push rdx",
             "push rcx",
@@ -45,6 +29,7 @@ pub extern "x86-interrupt" fn syscall_handler(_: InterruptStackFrame) {
             "pop rcx",
             "pop rdx",
             "pop rsi",
+            "pop rbp",
             "pop rdi",
             "pop r8",
             "pop r9",
@@ -54,16 +39,18 @@ pub extern "x86-interrupt" fn syscall_handler(_: InterruptStackFrame) {
             "pop r13",
             "pop r14",
             "pop r15",
+            "iretq",
             sym do_syscall,
         )
     }
 }
 
-const NUM_SYSCALLS: usize = 2;
+const NUM_SYSCALLS: usize = 3;
 
 const SYSCALL_TABLE: [fn (*mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_test,
     sys_write,
+    sys_fork,
 ];
 
 pub extern "C" fn do_syscall(args: *mut SyscallStackFrame) {
@@ -98,4 +85,8 @@ pub fn sys_write(args: *mut SyscallStackFrame) {
             term.process(b"\x1b[0m");
         }
     }
+}
+
+pub fn sys_fork(args: *mut SyscallStackFrame) {
+    super::process::do_fork(args);
 }

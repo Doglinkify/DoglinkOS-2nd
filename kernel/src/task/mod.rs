@@ -1,5 +1,6 @@
 pub mod process;
 pub mod syscall;
+pub mod sched;
 
 use core::arch::asm;
 use spin::Lazy;
@@ -44,7 +45,6 @@ pub fn reset_gdt() {
 
 #[allow(named_asm_labels)]
 pub fn init() {
-    x86_64::instructions::interrupts::enable();
     unsafe {
         let flags = Cr3::read().1;
         let new_cr3_va;
@@ -60,6 +60,7 @@ pub fn init() {
         ).unwrap();
         crate::println!("[DEBUG] task: will load task 0's cr3 {:?}", new_cr3);
         Cr3::write(new_cr3, flags);
+        x86_64::instructions::interrupts::enable(); // the last thing to do in Ring 0
         DS::set_reg(SegmentSelector::new(4, PrivilegeLevel::Ring3));
         ES::set_reg(SegmentSelector::new(4, PrivilegeLevel::Ring3));
         FS::set_reg(SegmentSelector::new(4, PrivilegeLevel::Ring3));

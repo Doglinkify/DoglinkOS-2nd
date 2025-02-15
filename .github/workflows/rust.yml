@@ -20,7 +20,7 @@ jobs:
         target: x86_64-unknown-none
         rustflags: ""
     - name: Build
-      run: cargo run
+      run: cargo run --release
     - uses: actions/upload-artifact@v4
       with:
         name: DoglinkOS.img

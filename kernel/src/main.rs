@@ -3,6 +3,7 @@
 
 use limine::request::{RequestsEndMarker, RequestsStartMarker};
 use limine::BaseRevision;
+use core::arch::asm;
 use DoglinkOS_2nd::mm::{init as init_mm, page_alloc::init as init_mm_ext};
 use DoglinkOS_2nd::console::init as init_terminal;
 use DoglinkOS_2nd::task::{reset_gdt, init as init_task};
@@ -54,6 +55,15 @@ extern "C" fn kmain() -> ! {
     test_page_alloc();
     init_task();
     println!("[INFO] kmain: all things ok, let's start!");
+    unsafe {
+        asm!(
+            "int 0x80",
+            in("rax") 1,
+            in("rdi") 0,
+            in("rsi") "hello, syscall".as_ptr(),
+            in("rcx") "hello, syscall".len(),
+        );
+    }
     hang();
 }
 

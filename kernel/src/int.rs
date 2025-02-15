@@ -3,6 +3,7 @@ use x86_64::structures::idt::InterruptDescriptorTable;
 use x86_64::structures::idt::InterruptStackFrame;
 use x86_64::structures::idt::PageFaultErrorCode;
 use x86_64::registers::control::Cr2;
+use x86_64::PrivilegeLevel;
 use spin::Lazy;
 
 pub static IDT: Lazy<InterruptDescriptorTable> = Lazy::new(|| {
@@ -11,6 +12,7 @@ pub static IDT: Lazy<InterruptDescriptorTable> = Lazy::new(|| {
     temp[33].set_handler_fn(handler2);
     temp[34].set_handler_fn(handler3);
     temp[36].set_handler_fn(handler4);
+    temp[0x80].set_handler_fn(crate::task::syscall::syscall_handler).set_privilege_level(PrivilegeLevel::Ring3);
     temp.page_fault.set_handler_fn(handler5);
     temp.general_protection_fault.set_handler_fn(handler6);
     temp

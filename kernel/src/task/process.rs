@@ -60,23 +60,31 @@ impl<'a> Process<'a> {
     }
 
     fn r_copy(src_table: &PageTable, dest_table: &mut PageTable, level: u8) {
+        // crate::println!("r_copy: src_table {:?} dest_table {:?} level {}",
+        //          src_table as *const _, dest_table as *const _, level);
+        dest_table.zero();
         for (index, entry) in src_table.iter().enumerate() {
-            if (level == 1)
-                || entry.is_unused()
-                || entry.flags().contains(PageTableFlags::HUGE_PAGE)
-                {
-                    let mut flags = entry.flags();
-                    flags.insert(PageTableFlags::USER_ACCESSIBLE);
-                    dest_table[index].set_addr(entry.addr(), flags);
-                    continue;
-                }
-                let new_table_pa = alloc_physical_page().unwrap();
+            if !entry.flags().contains(PageTableFlags::PRESENT) {
+                continue;
+            }
+            if level == 1 || entry.flags().contains(PageTableFlags::HUGE_PAGE) {
+                let mut flags = entry.flags();
+                flags.insert(PageTableFlags::USER_ACCESSIBLE);
+                dest_table[index].set_addr(entry.addr(), flags);
+                continue;
+            }
+            let new_addr = entry.addr().as_u64();
+            if new_addr > (1 << 32) {
+                crate::println!("[WARN] r_copy: ignoring level {level} page table at physical address 0x{:x}", new_addr);
+                continue;
+            }
+            let new_table_pa = alloc_physical_page().unwrap();
             let new_table_va = phys_to_virt(new_table_pa);
             let mut flags = entry.flags();
             flags.insert(PageTableFlags::USER_ACCESSIBLE);
             dest_table[index].set_addr(PhysAddr::new(new_table_pa), flags);
             let new_table = unsafe { &mut *(new_table_va as *mut PageTable) };
-            let new_src = unsafe { &*(phys_to_virt(entry.addr().as_u64()) as *mut PageTable) };
+            let new_src = unsafe { &*(phys_to_virt(new_addr) as *mut PageTable) };
             Self::r_copy(new_src, new_table, level - 1);
         }
     }

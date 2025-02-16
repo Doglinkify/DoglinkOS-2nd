@@ -7,6 +7,12 @@ use x86_64::addr::PhysAddr;
 use crate::mm::page_alloc::alloc_physical_page;
 use crate::mm::phys_to_virt;
 use core::sync::atomic::Ordering;
+use fatfs::Read;
+use x86_64::structures::paging::page::Page;
+use x86_64::structures::paging::page::Size4KiB;
+use x86_64::addr::VirtAddr;
+use x86_64::structures::paging::frame::PhysFrame;
+use x86_64::structures::paging::Mapper;
 
 #[derive(Default, Copy, Clone, Debug)]
 #[repr(C)]
@@ -117,4 +123,50 @@ pub fn do_fork(context: *mut ProcessContext) {
     let mut tasks = TASKS.lock();
     let new_process = tasks[super::sched::CURRENT_TASK_ID.load(Ordering::Relaxed)].as_ref().unwrap().copy_process(context, unsafe { next_tid });
     tasks[unsafe { next_tid }] = Some(new_process);
+}
+
+pub fn do_exec(args: *mut ProcessContext) {
+    let path = unsafe {
+        let slice = core::slice::from_raw_parts((*args).rdi as *const _, (*args).rcx as usize);
+        core::str::from_utf8(slice).unwrap()
+    };
+    let mut elf_file = crate::vfs::get_file(path);
+    let mut size = 0;
+    for e in elf_file.extents() {
+        size += e.unwrap().size;
+    }
+    let c_tid = super::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
+    let mut tasks = TASKS.lock();
+    let current_task = tasks[c_tid].as_mut().unwrap();
+    let mut buf = alloc::vec![0u8; size as usize];
+    elf_file.read_exact(buf.as_mut_slice()).unwrap();
+    let new_elf = goblin::elf::Elf::parse(buf.as_slice()).unwrap();
+    for ph in new_elf.program_headers {
+        if ph.p_type == goblin::elf::program_header::PT_LOAD {
+            let start_va = VirtAddr::new(ph.p_vaddr);
+            let end_va = VirtAddr::new(ph.p_vaddr + ph.p_memsz);
+            for page in Page::range_inclusive(Page::<Size4KiB>::containing_address(start_va), Page::<Size4KiB>::containing_address(end_va)) {
+                let allocated_pa = PhysAddr::new(alloc_physical_page().unwrap());
+                unsafe {
+                    current_task.page_table.map_to(
+                        page,
+                        PhysFrame::from_start_address(allocated_pa).unwrap(),
+                        PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
+                        &mut crate::mm::page_alloc::DLOSFrameAllocator,
+                    ).unwrap().flush();
+                }
+                //crate::println!("[DEBUG] sys_exec: mapped {:?} to {:?}", allocated_pa, page);
+            }
+            let mut target_slice = unsafe {
+                core::slice::from_raw_parts_mut(start_va.as_mut_ptr::<u8>(), ph.p_memsz as usize)
+            };
+            target_slice.fill(0u8);
+            target_slice = &mut target_slice[0..(ph.p_filesz as usize)];
+            target_slice.copy_from_slice(&buf[ph.file_range()]);
+            //crate::println!("[DEBUG] sys_exec: copied {:?} to {:?}", &buf[ph.file_range()] as *const _, target_slice as *const _);
+        }
+    }
+    unsafe {
+        (*args).rip = new_elf.entry;
+    }
 }

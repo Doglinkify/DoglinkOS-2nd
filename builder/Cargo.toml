@@ -19,3 +19,8 @@ features = ["std", "alloc"]
 path = "../kernel"
 artifact = "bin"
 target = "x86_64-unknown-none"
+
+[dependencies.doglinked]
+path = "../apps/init"
+artifact = "bin"
+target = "x86_64-unknown-none"

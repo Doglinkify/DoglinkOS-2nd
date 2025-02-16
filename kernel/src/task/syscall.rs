@@ -45,12 +45,13 @@ pub extern "x86-interrupt" fn syscall_handler(_: InterruptStackFrame) {
     }
 }
 
-const NUM_SYSCALLS: usize = 3;
+const NUM_SYSCALLS: usize = 4;
 
 const SYSCALL_TABLE: [fn (*mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_test,
     sys_write,
     sys_fork,
+    sys_exec,
 ];
 
 pub extern "C" fn do_syscall(args: *mut SyscallStackFrame) {
@@ -89,4 +90,8 @@ pub fn sys_write(args: *mut SyscallStackFrame) {
 
 pub fn sys_fork(args: *mut SyscallStackFrame) {
     super::process::do_fork(args);
+}
+
+pub fn sys_exec(args: *mut SyscallStackFrame) {
+    super::process::do_exec(args);
 }

@@ -17,3 +17,4 @@ pub mod mm;
 pub mod pcie;
 pub mod blockdev;
 pub mod task;
+pub mod vfs;

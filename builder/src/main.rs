@@ -1,5 +1,5 @@
 use argh::FromArgs;
-use builder::ImageBuilder;
+use builder::{FatBuilder, ImageBuilder};
 use ovmf_prebuilt::{Arch, FileType, Prebuilt, Source};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -81,16 +81,27 @@ fn main() {
 }
 
 fn build_img() -> PathBuf {
-    let kernel_path = Path::new(env!("CARGO_BIN_FILE_DOGLINKOS_2ND"));
-    println!("Building UEFI disk image for kernel at {:#?}", &kernel_path);
+    let doglinked_path = Path::new(env!("CARGO_BIN_FILE_DOGLINKED"));
+    println!("Building initrd image for doglinked executable at {:#?}", &doglinked_path);
 
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let assets_dir = manifest_dir.join("assets");
 
+    let initrd_files = BTreeMap::from([
+        ("doglinked", doglinked_path.to_path_buf())
+    ]);
+    let initrd_path = manifest_dir.parent().unwrap().join("initrd.img");
+    FatBuilder::create(initrd_files, &initrd_path).expect("failed to build initrd.img");
+    println!("Created initrd.img at {:#?}", &initrd_path);
+
+    let kernel_path = Path::new(env!("CARGO_BIN_FILE_DOGLINKOS_2ND"));
+    println!("Building UEFI disk image for kernel at {:#?}", &kernel_path);
+
     let files = BTreeMap::from([
         ("kernel", kernel_path.to_path_buf()),
-                               ("efi/boot/bootx64.efi", assets_dir.join("BOOTX64.EFI")),
-                               ("limine.conf", assets_dir.join("limine.conf")),
+        ("efi/boot/bootx64.efi", assets_dir.join("BOOTX64.EFI")),
+        ("limine.conf", assets_dir.join("limine.conf")),
+        ("initrd.img", initrd_path.to_path_buf()),
     ]);
 
     let img_path = manifest_dir.parent().unwrap().join("DoglinkOS-2nd.img");

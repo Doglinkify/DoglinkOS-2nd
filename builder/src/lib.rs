@@ -32,7 +32,7 @@ impl ImageBuilder {
     }
 }
 
-struct FatBuilder;
+pub struct FatBuilder;
 
 impl FatBuilder {
     pub fn create(files: Files, out_path: &Path) -> anyhow::Result<()> {

@@ -12,9 +12,9 @@ use DoglinkOS_2nd::apic::{io::init as init_ioapic, local::init as init_lapic};
 use DoglinkOS_2nd::acpi::parse_madt;
 use DoglinkOS_2nd::pcie::enumrate::{init as init_pcie, doit};
 use DoglinkOS_2nd::cpu::show_cpu_info;
-use DoglinkOS_2nd::blockdev::ramdisk::test as test_ramdisk;
 use DoglinkOS_2nd::blockdev::ahci::init as init_ahci;
 use DoglinkOS_2nd::mm::page_alloc::test as test_page_alloc;
+use DoglinkOS_2nd::vfs::init as init_vfs;
 use DoglinkOS_2nd::println;
 
 #[used]
@@ -51,55 +51,27 @@ extern "C" fn kmain() -> ! {
     init_ahci();
     show_cpu_info();
     show_pcie_info();
-    test_ramdisk();
     test_page_alloc();
+    init_vfs();
     init_task();
     println!("[INFO] kmain: all things ok, let's start!");
-    let mut fork_result: u64;
+    let fork_result: u64;
     unsafe {
         asm!(
             "int 0x80",
             in("rax") 2, // sys_fork
             out("rcx") fork_result,
         );
-        println!("fork() returns {fork_result}");
         if fork_result == 0 {
-            loop {
-                asm!(
-                    "int 0x80",
-                    in("rax") 1, // sys_write
-                    in("rdi") 1, // stdout
-                    in("rsi") "process 1: hello\n".as_ptr(),
-                    in("rcx") "process 1: hello\n".len(),
-                );
-            }
-        } else {
             asm!(
                 "int 0x80",
-                 in("rax") 2, // sys_fork
-                 out("rcx") fork_result,
+                in("rax") 3, // sys_exec
+                in("rdi") "/doglinked".as_ptr(),
+                in("rcx") "/doglinked".len(),
             );
-            if fork_result == 0 {
-                loop {
-                    asm!(
-                        "int 0x80",
-                         in("rax") 1, // sys_write
-                         in("rdi") 0, // stderr
-                         in("rsi") "process 2: hello\n".as_ptr(),
-                         in("rcx") "process 2: hello\n".len(),
-                    );
-                }
-            } else {
-                loop {
-                    asm!(
-                        "int 0x80",
-                        in("rax") 1, // sys_write
-                        in("rdi") 1, // stdout
-                        in("rsi") "process 0: hello\n".as_ptr(),
-                        in("rcx") "process 0: hello\n".len(),
-                    );
-                }
-            }
+            unreachable!();
+        } else {
+            loop {}
         }
     }
 }

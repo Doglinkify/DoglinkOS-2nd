@@ -4,6 +4,10 @@ use crate::mm::bitmap::Bitmap;
 use super::convert_unit;
 use super::phys_to_virt;
 use spin::{Mutex, Lazy};
+use x86_64::structures::paging::FrameAllocator;
+use x86_64::addr::PhysAddr;
+use x86_64::structures::paging::PhysFrame;
+use x86_64::structures::paging::Size4KiB;
 
 #[used]
 #[link_section = ".requests"]
@@ -90,6 +94,20 @@ pub fn alloc_physical_page() -> Option<u64> {
 pub fn dealloc_physical_page(addr: u64) {
     let index = addr / 4096;
     ALLOCATOR_STATE.lock().set(index as usize, true);
+}
+
+pub struct DLOSFrameAllocator;
+
+unsafe impl FrameAllocator<Size4KiB> for DLOSFrameAllocator {
+    fn allocate_frame(&mut self) -> Option<PhysFrame<Size4KiB>> {
+        Some(
+            PhysFrame::from_start_address(
+                PhysAddr::new(
+                    alloc_physical_page().unwrap()
+                )
+            ).unwrap()
+        )
+    }
 }
 
 pub fn test() {

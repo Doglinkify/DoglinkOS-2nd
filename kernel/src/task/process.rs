@@ -138,8 +138,16 @@ pub fn do_exec(args: *mut ProcessContext) {
     let c_tid = super::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
     let mut tasks = TASKS.lock();
     let current_task = tasks[c_tid].as_mut().unwrap();
+    crate::println!("[xiaoyi-DEBUG] sys_exec: the size of target ELF file is {size}");
     let mut buf = alloc::vec![0u8; size as usize];
     elf_file.read_exact(buf.as_mut_slice()).unwrap();
+    {
+        let mut hash: u64 = 0;
+        for byte in &buf {
+            hash = hash * 3131 + *byte as u64;
+        }
+        crate::println!("[xiaoyi-DEBUG] hash of the ELF is 0x{:016x}", hash);
+    }
     let new_elf = goblin::elf::Elf::parse(buf.as_slice()).unwrap();
     for ph in new_elf.program_headers {
         if ph.p_type == goblin::elf::program_header::PT_LOAD {

@@ -18,7 +18,7 @@ pub static offset: Mutex<u64> = Mutex::new(0);
 pub fn init() {
     let res = HHDM_REQUEST.get_response().unwrap();
     *offset.lock() = res.offset();
-    let heap_address = phys_to_virt(0x10000);
+    let heap_address = phys_to_virt(0x20000);
     unsafe {
         ALLOCATOR.init(heap_address as usize, 8 * 1024 * 1024);
     }

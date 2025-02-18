@@ -1,6 +1,6 @@
 use limine::request::MemoryMapRequest;
 use crate::println;
-use crate::mm::bitmap::Bitmap;
+use crate::mm::bitmap::PageMan;
 use super::convert_unit;
 use super::phys_to_virt;
 use spin::{Mutex, Lazy};
@@ -13,7 +13,7 @@ use x86_64::structures::paging::Size4KiB;
 #[link_section = ".requests"]
 static MMAP_REQUEST: MemoryMapRequest = MemoryMapRequest::new();
 
-static ALLOCATOR_STATE: Lazy<Mutex<Bitmap>> = Lazy::new(|| {
+static ALLOCATOR_STATE: Lazy<Mutex<PageMan>> = Lazy::new(|| {
     let res = MMAP_REQUEST.get_response().unwrap();
 
     let usable_mem = res
@@ -30,21 +30,28 @@ static ALLOCATOR_STATE: Lazy<Mutex<Bitmap>> = Lazy::new(|| {
     let total_pages = max_address / 4096;
     println!("[DEBUG] mm: need to manage {} pages (aka {} {})", total_pages, conv_res.0, conv_res.1);
 
-    let bitmap_size = total_pages.div_ceil(8); // unit: bytes
-    let conv_res = convert_unit(bitmap_size);
+    let bitmap_size = PageMan::calc_size(total_pages); // unit: (count, count, bytes)
+    let conv_res = convert_unit(bitmap_size.2);
     println!("[DEBUG] mm: need bitmap size of {} {}", conv_res.0, conv_res.1);
 
     let bitmap_address = usable_mem
         .clone()
-        .find(|region| region.length >= bitmap_size as u64)
+        .find(|region| region.length >= bitmap_size.2)
         .map(|region| region.base)
         .unwrap();
 
-    let bitmap_buffer = unsafe {
-        core::slice::from_raw_parts_mut(phys_to_virt(bitmap_address) as *mut usize, (bitmap_size.div_ceil(8)) as usize)
+    let bitmap_buffer1 = unsafe {
+        core::slice::from_raw_parts_mut(phys_to_virt(bitmap_address) as *mut usize, bitmap_size.0 as usize)
     };
 
-    let mut bitmap = Bitmap::new(bitmap_buffer);
+    let bitmap_buffer2 = unsafe {
+        core::slice::from_raw_parts_mut(phys_to_virt(bitmap_address + bitmap_size.0 * 8) as *mut u8, bitmap_size.1 as usize)
+    };
+
+    println!("[DEBUG] mm: bitmap_buffer1 is {:?}", bitmap_buffer1.as_ptr());
+    println!("[DEBUG] mm: bitmap_buffer2 is {:?}", bitmap_buffer2.as_ptr());
+
+    let mut bitmap = PageMan::new(bitmap_buffer1, bitmap_buffer2);
 
     for region in usable_mem.clone() {
         let start_page = region.base / 4096;
@@ -53,10 +60,12 @@ static ALLOCATOR_STATE: Lazy<Mutex<Bitmap>> = Lazy::new(|| {
     }
 
     let bitmap_start_page = bitmap_address / 4096;
-    let bitmap_end_page = bitmap_start_page + bitmap_size.div_ceil(4096);
+    let bitmap_end_page = bitmap_start_page + bitmap_size.2.div_ceil(4096);
     bitmap.set_range(bitmap_start_page as usize, bitmap_end_page as usize, false);
 
-    bitmap.set_range(16, 2064, false); // kernel heap
+    println!("[DEBUG] mm: bitmap_end_page is 0x{:x}", bitmap_end_page * 4096);
+
+    bitmap.set_range(32, 2080, false); // kernel heap
 
     Mutex::new(bitmap)
 });

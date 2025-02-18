@@ -1,11 +1,17 @@
 use bit_field::BitField;
 
-pub struct Bitmap(&'static mut [usize]);
+pub struct PageMan(&'static mut [usize], &'static mut [u8]);
 
-impl Bitmap {
-    pub fn new(inner: &'static mut [usize]) -> Self {
-        inner.fill(0);
-        Self(inner)
+impl PageMan {
+    pub fn calc_size(len: u64) -> (u64, u64, u64) {
+        let tmp = len.div_ceil(64);
+        (tmp, len, tmp * 8 + len)
+    }
+
+    pub fn new(bmp: &'static mut [usize], refcnt: &'static mut [u8]) -> Self {
+        bmp.fill(0);
+        refcnt.fill(0);
+        Self(bmp, refcnt)
     }
 
     pub fn len(&self) -> usize {
@@ -28,5 +34,17 @@ impl Bitmap {
         for pos in l..r {
             self.set(pos, value);
         }
+    }
+
+    pub fn incref(&mut self, pos: usize) {
+        self.1[pos] += 1;
+    }
+
+    pub fn decref(&mut self, pos: usize) {
+        self.1[pos] -= 1;
+    }
+
+    pub fn getref(&self, pos: usize) -> u8 {
+        self.1[pos]
     }
 }

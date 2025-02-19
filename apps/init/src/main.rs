@@ -6,26 +6,14 @@ fn rust_panic(_: &core::panic::PanicInfo) -> ! {
     loop {}
 }
 
-fn fib(n: i32) -> i32 {
-    if n < 2 {
-        n
-    } else {
-        fib(n - 1) + fib(n - 2)
-    }
+struct Globals {
+    pub t: vcell::VolatileCell<i32>
 }
 
-fn i32_to_str(mut x: i32, buf: &mut [u8]) -> usize {
-    let mut len: usize = 0;
-    while x > 0 {
-        buf[len] = (x % 10) as u8 + 0x30;
-        x /= 10;
-        len += 1;
-    }
-    for i in 0..(len / 2) {
-        (buf[i], buf[len - i - 1]) = (buf[len - i - 1], buf[i]);
-    }
-    len
-}
+unsafe impl Send for Globals {}
+unsafe impl Sync for Globals {}
+
+static TEST: Globals = Globals { t: vcell::VolatileCell::new(0) };
 
 #[unsafe(no_mangle)]
 extern "C" fn _start() {
@@ -37,16 +25,27 @@ extern "C" fn _start() {
             in("rsi") "Hello, ELF!\n".as_ptr(),
             in("rcx") "Hello, ELF!\n".len(),
         );
-        let mut buf = [0u8; 64];
-        let len = i32_to_str(fib(35), &mut buf);
-        buf[len] = b'\n';
+        let fork_result: u64;
+        core::arch::asm!(
+            "int 0x80",
+            in("rax") 2, // sys_fork
+            out("rcx") fork_result,
+        );
+        if fork_result == 0 {
+            // child
+            TEST.t.set(5);
+        } else {
+            // parent
+            TEST.t.set(4);
+        }
+        while TEST.t.get() == 0 {}
         core::arch::asm!(
             "int 0x80",
             in("rax") 1, // sys_write
             in("rdi") 0, // stderr
-            in("rsi") buf.as_ptr(),
-            in("rcx") len + 1,
-        );
+            in("rsi") if TEST.t.get() == 5 { "Now TEST is 5!\n".as_ptr() } else { "Now TEST is 4!\n".as_ptr() },
+            in("rcx") "Now TEST is 5!\n".len(),
+        )
     }
     loop {}
 }

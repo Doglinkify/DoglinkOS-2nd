@@ -49,32 +49,39 @@ pub struct Process<'a> {
 impl<'a> Process<'a> {
     pub fn task_0() -> Self {
         Process {
-            page_table: Self::new_p4_table(),
+            page_table: Self::t0_p4_table(),
             context: ProcessContext::default(),
             tm: 0,
         }
     }
 
-    fn new_p4_table() -> OffsetPageTable<'static> {
+    fn t0_p4_table() -> OffsetPageTable<'static> {
         let p4t_pa = alloc_physical_page().unwrap();
         let p4t_va = phys_to_virt(p4t_pa);
         let p4t = unsafe { &mut *(p4t_va as *mut PageTable) };
-        let kernel_p4t = unsafe { &*(phys_to_virt(Cr3::read().0.start_address().as_u64()) as *const PageTable) };
-        Self::r_copy(kernel_p4t, p4t, 4);
+        let kernel_p4t = unsafe { &mut *(phys_to_virt(Cr3::read().0.start_address().as_u64()) as *mut PageTable) };
+        Self::r_copy(kernel_p4t, p4t, 4, false, false);
         let page_table = unsafe { OffsetPageTable::new(p4t, x86_64::addr::VirtAddr::new(phys_to_virt(0))) };
         page_table
     }
 
-    fn r_copy(src_table: &PageTable, dest_table: &mut PageTable, level: u8) {
+    fn r_copy(src_table: &mut PageTable, dest_table: &mut PageTable, level: u8, copying_process: bool, is_user_page: bool) {
         // crate::println!("r_copy: src_table {:?} dest_table {:?} level {}",
         //          src_table as *const _, dest_table as *const _, level);
         dest_table.zero();
-        for (index, entry) in src_table.iter().enumerate() {
+        for (index, entry) in src_table.iter_mut().enumerate() {
             if !entry.flags().contains(PageTableFlags::PRESENT) {
                 continue;
             }
             if level == 1 || entry.flags().contains(PageTableFlags::HUGE_PAGE) {
                 let mut flags = entry.flags();
+                if is_user_page {
+                    crate::mm::page_alloc::page_incref(entry.addr().as_u64());
+                    if copying_process {
+                        flags.remove(PageTableFlags::WRITABLE);
+                        entry.set_flags(flags);
+                    }
+                }
                 flags.insert(PageTableFlags::USER_ACCESSIBLE);
                 dest_table[index].set_addr(entry.addr(), flags);
                 continue;
@@ -90,16 +97,20 @@ impl<'a> Process<'a> {
             flags.insert(PageTableFlags::USER_ACCESSIBLE);
             dest_table[index].set_addr(PhysAddr::new(new_table_pa), flags);
             let new_table = unsafe { &mut *(new_table_va as *mut PageTable) };
-            let new_src = unsafe { &*(phys_to_virt(new_addr) as *mut PageTable) };
-            Self::r_copy(new_src, new_table, level - 1);
+            let new_src = unsafe { &mut *(phys_to_virt(new_addr) as *mut PageTable) };
+            if level == 4 {
+                 Self::r_copy(new_src, new_table, level - 1, copying_process, index < 256);
+            } else {
+                 Self::r_copy(new_src, new_table, level - 1, copying_process, is_user_page);
+            }
         }
     }
 
-    pub fn copy_process(&self, context: *mut ProcessContext, new_tid: usize) -> Self {
+    pub fn copy_process(&mut self, context: *mut ProcessContext, new_tid: usize) -> Self {
         let p4t_pa = alloc_physical_page().unwrap();
         let p4t_va = phys_to_virt(p4t_pa);
         let p4t = unsafe { &mut *(p4t_va as *mut PageTable) };
-        Self::r_copy(self.page_table.level_4_table(), p4t, 4);
+        Self::r_copy(self.page_table.level_4_table_mut(), p4t, 4, true, false);
         let mut new_context = unsafe { *context };
         new_context.rcx = 0;
         unsafe {
@@ -121,7 +132,7 @@ pub fn do_fork(context: *mut ProcessContext) {
         next_tid += 1;
     }
     let mut tasks = TASKS.lock();
-    let new_process = tasks[super::sched::CURRENT_TASK_ID.load(Ordering::Relaxed)].as_ref().unwrap().copy_process(context, unsafe { next_tid });
+    let new_process = tasks[super::sched::CURRENT_TASK_ID.load(Ordering::Relaxed)].as_mut().unwrap().copy_process(context, unsafe { next_tid });
     tasks[unsafe { next_tid }] = Some(new_process);
 }
 
@@ -154,15 +165,16 @@ pub fn do_exec(args: *mut ProcessContext) {
             let start_va = VirtAddr::new(ph.p_vaddr);
             let end_va = VirtAddr::new(ph.p_vaddr + ph.p_memsz);
             for page in Page::range_inclusive(Page::<Size4KiB>::containing_address(start_va), Page::<Size4KiB>::containing_address(end_va)) {
-                let allocated_pa = PhysAddr::new(alloc_physical_page().unwrap());
+                let allocated_pa = alloc_physical_page().unwrap();
                 unsafe {
                     current_task.page_table.map_to(
                         page,
-                        PhysFrame::from_start_address(allocated_pa).unwrap(),
+                        PhysFrame::from_start_address(PhysAddr::new(allocated_pa)).unwrap(),
                         PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
                         &mut crate::mm::page_alloc::DLOSFrameAllocator,
                     ).unwrap().flush();
                 }
+                crate::mm::page_alloc::page_incref(allocated_pa);
                 //crate::println!("[DEBUG] sys_exec: mapped {:?} to {:?}", allocated_pa, page);
             }
             let mut target_slice = unsafe {

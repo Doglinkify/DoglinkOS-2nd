@@ -87,8 +87,19 @@ pub extern "x86-interrupt" fn handler4(_: InterruptStackFrame) {
 }
 
 pub extern "x86-interrupt" fn handler5(f: InterruptStackFrame, code: PageFaultErrorCode) {
-    println!("page fault, caused by instruction at {:?}, addr: {:?}, code: {:?}", f.instruction_pointer, Cr2::read().unwrap(), code);
-    loop{}
+    match f.code_segment.rpl() {
+        PrivilegeLevel::Ring0 => {
+            println!(
+                "page fault in kernel code, caused by instruction at {:?}, addr: {:?}, code: {:?}",
+                f.instruction_pointer, Cr2::read().unwrap(), code
+            );
+            loop {}
+        },
+        PrivilegeLevel::Ring3 => {
+            crate::mm::page_alloc::do_user_page_fault(code)
+        },
+        _ => unreachable!() // Ring1 and Ring2 is unused in this kernel
+    }
 }
 
 pub extern "x86-interrupt" fn handler6(f: InterruptStackFrame, c: u64) {

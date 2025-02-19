@@ -8,6 +8,11 @@ use x86_64::structures::paging::FrameAllocator;
 use x86_64::addr::PhysAddr;
 use x86_64::structures::paging::PhysFrame;
 use x86_64::structures::paging::Size4KiB;
+use x86_64::structures::idt::PageFaultErrorCode;
+use x86_64::registers::control::Cr2;
+use x86_64::structures::paging::page::Page;
+use x86_64::structures::paging::Mapper;
+use x86_64::structures::paging::PageTableFlags;
 
 #[used]
 #[link_section = ".requests"]
@@ -105,6 +110,18 @@ pub fn dealloc_physical_page(addr: u64) {
     ALLOCATOR_STATE.lock().set(index as usize, true);
 }
 
+pub fn page_incref(addr: u64) {
+    ALLOCATOR_STATE.lock().incref(addr as usize / 4096);
+}
+
+pub fn page_decref(addr: u64) {
+    ALLOCATOR_STATE.lock().decref(addr as usize / 4096);
+}
+
+pub fn page_getref(addr: u64) -> u8 {
+    ALLOCATOR_STATE.lock().getref(addr as usize / 4096)
+}
+
 pub struct DLOSFrameAllocator;
 
 unsafe impl FrameAllocator<Size4KiB> for DLOSFrameAllocator {
@@ -134,5 +151,44 @@ pub fn test() {
     }
     for i in 0..10 {
         dealloc_physical_page(addresses[i]);
+    }
+}
+
+pub fn do_user_page_fault(code: PageFaultErrorCode) {
+    let addr = Cr2::read().unwrap();
+    let page = Page::<Size4KiB>::containing_address(addr);
+    let current = crate::task::sched::CURRENT_TASK_ID.load(core::sync::atomic::Ordering::Relaxed);
+    let mut tasks = crate::task::process::TASKS.lock();
+    let pgt = &mut tasks[current]
+        .as_mut().unwrap()
+        .page_table;
+    let phys_addr = pgt
+        .translate_page(page).unwrap()
+        .start_address().as_u64();
+//    println!("[DEBUG] user page fault, code: {code:?} current process: {current}, {:?} 0x{:x}", addr, phys_addr);
+    if code.contains(PageFaultErrorCode::PROTECTION_VIOLATION | PageFaultErrorCode::CAUSED_BY_WRITE) {
+        if page_getref(phys_addr) > 1 {
+            let new_page_pa = alloc_physical_page().unwrap();
+            let new_page_va = super::phys_to_virt(new_page_pa);
+            let old_page_va = addr.align_down(4096u64);
+            unsafe {
+                core::ptr::copy(old_page_va.as_ptr::<u8>(), new_page_va as *mut u8, 4096);
+                page_decref(phys_addr);
+                pgt.unmap(page).unwrap().1.flush();
+                pgt.map_to(
+                    page,
+                    PhysFrame::from_start_address(PhysAddr::new(new_page_pa)).unwrap(),
+                    PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
+                    &mut DLOSFrameAllocator,
+                ).unwrap().flush();
+                page_incref(new_page_pa);
+            }
+        } else {
+            unsafe {
+                pgt.update_flags(page, PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE).unwrap().flush();
+            }
+        }
+    } else {
+        panic!("unrecoverable user page fault");
     }
 }

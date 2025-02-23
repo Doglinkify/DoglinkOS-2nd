@@ -5,6 +5,7 @@ use super::convert_unit;
 use super::phys_to_virt;
 use spin::{Mutex, Lazy};
 use x86_64::structures::paging::FrameAllocator;
+use x86_64::structures::paging::FrameDeallocator;
 use x86_64::addr::PhysAddr;
 use x86_64::structures::paging::PhysFrame;
 use x86_64::structures::paging::Size4KiB;
@@ -107,7 +108,11 @@ pub fn alloc_physical_page() -> Option<u64> {
 
 pub fn dealloc_physical_page(addr: u64) {
     let index = addr / 4096;
-    ALLOCATOR_STATE.lock().set(index as usize, true);
+    let mut alc = ALLOCATOR_STATE.lock();
+    if alc.get(index as usize) {
+        panic!("[ERROR] mm: detected double free on page 0x{addr}, kernel bug?");
+    }
+    alc.set(index as usize, true);
 }
 
 pub fn page_incref(addr: u64) {
@@ -133,6 +138,14 @@ unsafe impl FrameAllocator<Size4KiB> for DLOSFrameAllocator {
                 )
             ).unwrap()
         )
+    }
+}
+
+pub struct DLOSFrameDeallocator;
+
+impl FrameDeallocator<Size4KiB> for DLOSFrameDeallocator {
+    unsafe fn deallocate_frame(&mut self, frame: PhysFrame<Size4KiB>) {
+        dealloc_physical_page(frame.start_address().as_u64());
     }
 }
 
@@ -162,11 +175,10 @@ pub fn do_user_page_fault(code: PageFaultErrorCode) {
     let pgt = &mut tasks[current]
         .as_mut().unwrap()
         .page_table;
-    let phys_addr = pgt
-        .translate_page(page).unwrap()
-        .start_address().as_u64();
-//    println!("[DEBUG] user page fault, code: {code:?} current process: {current}, {:?} 0x{:x}", addr, phys_addr);
     if code.contains(PageFaultErrorCode::PROTECTION_VIOLATION | PageFaultErrorCode::CAUSED_BY_WRITE) {
+        let phys_addr = pgt
+            .translate_page(page).unwrap()
+            .start_address().as_u64();
         if page_getref(phys_addr) > 1 {
             let new_page_pa = alloc_physical_page().unwrap();
             let new_page_va = super::phys_to_virt(new_page_pa);
@@ -188,7 +200,23 @@ pub fn do_user_page_fault(code: PageFaultErrorCode) {
                 pgt.update_flags(page, PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE).unwrap().flush();
             }
         }
+    } else if within_stack_range(addr) {
+        let new_page_pa = alloc_physical_page().unwrap();
+        page_incref(new_page_pa);
+        unsafe {
+            pgt.map_to(
+                page,
+                PhysFrame::from_start_address(PhysAddr::new(new_page_pa)).unwrap(),
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
+                &mut DLOSFrameAllocator,
+            ).unwrap().flush();
+        }
     } else {
         panic!("unrecoverable user page fault");
     }
+}
+
+fn within_stack_range(addr: x86_64::VirtAddr) -> bool {
+    let ua = addr.as_u64();
+    (0x7fe00000..0x80000000).contains(&ua)
 }

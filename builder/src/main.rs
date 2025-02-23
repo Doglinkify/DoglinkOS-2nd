@@ -82,13 +82,14 @@ fn main() {
 
 fn build_img() -> PathBuf {
     let doglinked_path = Path::new(env!("CARGO_BIN_FILE_DOGLINKED"));
-    println!("Building initrd image for doglinked executable at {:#?}", &doglinked_path);
+    let t_path = Path::new(env!("CARGO_BIN_FILE_INFINITE_LOOP"));
 
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let assets_dir = manifest_dir.join("assets");
 
     let initrd_files = BTreeMap::from([
-        ("doglinked", doglinked_path.to_path_buf())
+        ("doglinked", doglinked_path.to_path_buf()),
+        ("infinite-loop", t_path.to_path_buf()),
     ]);
     let initrd_path = manifest_dir.parent().unwrap().join("initrd.img");
     FatBuilder::create(initrd_files, &initrd_path).expect("failed to build initrd.img");

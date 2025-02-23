@@ -45,7 +45,13 @@ extern "C" fn _start() {
             in("rdi") 0, // stderr
             in("rsi") if TEST.t.get() == 5 { "Now TEST is 5!\n".as_ptr() } else { "Now TEST is 4!\n".as_ptr() },
             in("rcx") "Now TEST is 5!\n".len(),
-        )
+        );
+        core::arch::asm!(
+            "int 0x80",
+            in("rax") 3, // sys_exec
+            in("rdi") "/infinite-loop".as_ptr(),
+            in("rcx") "/infinite-loop".len(),
+        );
+        unreachable!();
     }
-    loop {}
 }

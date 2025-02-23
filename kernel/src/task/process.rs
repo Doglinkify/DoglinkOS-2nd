@@ -13,6 +13,7 @@ use x86_64::structures::paging::page::Size4KiB;
 use x86_64::addr::VirtAddr;
 use x86_64::structures::paging::frame::PhysFrame;
 use x86_64::structures::paging::Mapper;
+use x86_64::structures::paging::mapper::CleanUp;
 
 #[derive(Default, Copy, Clone, Debug)]
 #[repr(C)]
@@ -61,7 +62,7 @@ impl<'a> Process<'a> {
         let p4t = unsafe { &mut *(p4t_va as *mut PageTable) };
         let kernel_p4t = unsafe { &mut *(phys_to_virt(Cr3::read().0.start_address().as_u64()) as *mut PageTable) };
         Self::r_copy(kernel_p4t, p4t, 4, false, false);
-        let page_table = unsafe { OffsetPageTable::new(p4t, x86_64::addr::VirtAddr::new(phys_to_virt(0))) };
+        let page_table = unsafe { OffsetPageTable::new(p4t, x86_64::addr::VirtAddr::new_truncate(phys_to_virt(0))) };
         page_table
     }
 
@@ -117,9 +118,60 @@ impl<'a> Process<'a> {
             (*context).rcx = new_tid as u64;
         }
         Self {
-            page_table: unsafe { OffsetPageTable::new(p4t, x86_64::addr::VirtAddr::new(phys_to_virt(0))) },
+            page_table: unsafe { OffsetPageTable::new(p4t, x86_64::addr::VirtAddr::new_truncate(phys_to_virt(0))) },
             context: new_context,
             tm: 0,
+        }
+    }
+
+    pub fn free_page_tables(&mut self, user_only: bool) {
+        {
+            let target_table = self.page_table.level_4_table_mut();
+            Self::r_free(target_table, 4, user_only, false);
+        }
+        if user_only {
+            unsafe {
+                self.page_table.clean_up_addr_range(
+                    Page::range_inclusive(
+                        Page::containing_address(VirtAddr::new_truncate(0)),
+                        Page::containing_address(VirtAddr::new_truncate(0x00007fffffffffff))
+                    ),
+                    &mut crate::mm::page_alloc::DLOSFrameDeallocator,
+                );
+            }
+        } else {
+            unsafe {
+                self.page_table.clean_up(&mut crate::mm::page_alloc::DLOSFrameDeallocator);
+            }
+        }
+    }
+
+    fn r_free(target_table: &mut PageTable, level: u8, user_only: bool, is_user_page: bool) {
+        let range = if level == 4 && user_only { 0..256 } else { 0..512 };
+        for idx in range {
+            let entry = &mut target_table[idx];
+            if !entry.flags().contains(PageTableFlags::PRESENT) {
+                continue;
+            }
+            if level == 1 || entry.flags().contains(PageTableFlags::HUGE_PAGE) {
+                if !user_only || is_user_page { // when user_only is set,  only use page_decref on user pages
+                    let addr = entry.addr().as_u64();
+                    entry.set_unused();
+                    //crate::println!("[DEBUG] will call page_decref on 0x{:x}", addr);
+                    crate::mm::page_alloc::page_decref(addr);
+                    if crate::mm::page_alloc::page_getref(addr) == 0 {
+                        //crate::println!("[DEBUG] will call dealloc_physical_page on 0x{:x}", addr);
+                        crate::mm::page_alloc::dealloc_physical_page(addr);
+                    }
+                }
+                continue;
+            }
+            let target_is_user_page = if level == 4 { idx < 256 } else { is_user_page };
+            if !user_only || target_is_user_page {
+                let new_pa = entry.addr().as_u64();
+                let new_target = unsafe { &mut *(phys_to_virt(new_pa) as *mut PageTable) };
+                Self::r_free(new_target, level - 1, user_only, target_is_user_page);
+            }
         }
     }
 }
@@ -146,10 +198,11 @@ pub fn do_exec(args: *mut ProcessContext) {
     for e in elf_file.extents() {
         size += e.unwrap().size;
     }
+    //crate::println!("[xiaoyi-DEBUG] sys_exec: the size of target ELF file ({path}) is {size}");
     let c_tid = super::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
     let mut tasks = TASKS.lock();
     let current_task = tasks[c_tid].as_mut().unwrap();
-    crate::println!("[xiaoyi-DEBUG] sys_exec: the size of target ELF file is {size}");
+    current_task.free_page_tables(true);
     let mut buf = alloc::vec![0u8; size as usize];
     elf_file.read_exact(buf.as_mut_slice()).unwrap();
     {
@@ -157,25 +210,26 @@ pub fn do_exec(args: *mut ProcessContext) {
         for byte in &buf {
             hash = hash * 3131 + *byte as u64;
         }
-        crate::println!("[xiaoyi-DEBUG] hash of the ELF is 0x{:016x}", hash);
+        //crate::println!("[xiaoyi-DEBUG] hash of the ELF is 0x{:016x}", hash);
     }
     let new_elf = goblin::elf::Elf::parse(buf.as_slice()).unwrap();
     for ph in new_elf.program_headers {
         if ph.p_type == goblin::elf::program_header::PT_LOAD {
-            let start_va = VirtAddr::new(ph.p_vaddr);
-            let end_va = VirtAddr::new(ph.p_vaddr + ph.p_memsz);
+            let start_va = VirtAddr::new_truncate(ph.p_vaddr);
+            let end_va = VirtAddr::new_truncate(ph.p_vaddr + ph.p_memsz);
             for page in Page::range_inclusive(Page::<Size4KiB>::containing_address(start_va), Page::<Size4KiB>::containing_address(end_va)) {
                 let allocated_pa = alloc_physical_page().unwrap();
                 unsafe {
-                    current_task.page_table.map_to(
+                    let _ = current_task.page_table.map_to(
                         page,
                         PhysFrame::from_start_address(PhysAddr::new(allocated_pa)).unwrap(),
                         PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
                         &mut crate::mm::page_alloc::DLOSFrameAllocator,
-                    ).unwrap().flush();
+                    ).map(|r| {
+                        r.flush();
+                        crate::mm::page_alloc::page_incref(allocated_pa);
+                    });
                 }
-                crate::mm::page_alloc::page_incref(allocated_pa);
-                //crate::println!("[DEBUG] sys_exec: mapped {:?} to {:?}", allocated_pa, page);
             }
             let mut target_slice = unsafe {
                 core::slice::from_raw_parts_mut(start_va.as_mut_ptr::<u8>(), ph.p_memsz as usize)
@@ -183,10 +237,10 @@ pub fn do_exec(args: *mut ProcessContext) {
             target_slice.fill(0u8);
             target_slice = &mut target_slice[0..(ph.p_filesz as usize)];
             target_slice.copy_from_slice(&buf[ph.file_range()]);
-            //crate::println!("[DEBUG] sys_exec: copied {:?} to {:?}", &buf[ph.file_range()] as *const _, target_slice as *const _);
         }
     }
     unsafe {
         (*args).rip = new_elf.entry;
+        (*args).rsp = 0x80000000;
     }
 }

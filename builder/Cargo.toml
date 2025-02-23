@@ -24,3 +24,8 @@ target = "x86_64-unknown-none"
 path = "../apps/init"
 artifact = "bin"
 target = "x86_64-unknown-none"
+
+[dependencies.infinite-loop]
+path = "../apps/infinite-loop"
+artifact = "bin"
+target = "x86_64-unknown-none"

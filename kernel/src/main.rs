@@ -4,7 +4,7 @@
 use limine::request::{RequestsEndMarker, RequestsStartMarker};
 use limine::BaseRevision;
 use core::arch::asm;
-use DoglinkOS_2nd::mm::{init as init_mm, page_alloc::init as init_mm_ext};
+use DoglinkOS_2nd::mm::init as init_mm;
 use DoglinkOS_2nd::console::init as init_terminal;
 use DoglinkOS_2nd::task::{reset_gdt, init as init_task};
 use DoglinkOS_2nd::int::init as init_interrupt;
@@ -42,7 +42,6 @@ extern "C" fn kmain() -> ! {
 | |_| | | (_) | | (_| | | | | | | | | | |   <  | |_| |  ___) | |_____|  / __/  | | | | | (_| |
 |____/   \___/   \__, | |_| |_| |_| |_| |_|\_\  \___/  |____/          |_____| |_| |_|  \__,_|
                  |___/");
-    init_mm_ext();
     reset_gdt();
     init_interrupt();
     init_lapic();

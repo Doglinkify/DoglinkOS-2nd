@@ -205,7 +205,6 @@ pub fn do_exec(args: *mut ProcessContext) {
     for e in elf_file.extents() {
         size += e.unwrap().size;
     }
-    //crate::println!("[xiaoyi-DEBUG] sys_exec: the size of target ELF file ({path}) is {size}");
     let c_tid = super::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
     let mut tasks = TASKS.lock();
     let current_task = tasks[c_tid].as_mut().unwrap();
@@ -217,9 +216,9 @@ pub fn do_exec(args: *mut ProcessContext) {
         for byte in &buf {
             hash = hash * 3131 + *byte as u64;
         }
-        //crate::println!("[xiaoyi-DEBUG] hash of the ELF is 0x{:016x}", hash);
     }
-    let new_elf = goblin::elf::Elf::parse(buf.as_slice()).unwrap();
+    let new_elf = goblin::elf::Elf::parse(buf.as_slice());
+    let new_elf = new_elf.unwrap(); // strange, but necessary
     for ph in new_elf.program_headers {
         if ph.p_type == goblin::elf::program_header::PT_LOAD {
             let start_va = VirtAddr::new_truncate(ph.p_vaddr);
@@ -246,6 +245,7 @@ pub fn do_exec(args: *mut ProcessContext) {
             target_slice.copy_from_slice(&buf[ph.file_range()]);
         }
     }
+    // crate::println!("[DEBUG] will set rip to 0x{:x}", new_elf.entry);
     unsafe {
         (*args).rip = new_elf.entry;
         (*args).rsp = 0x80000000;

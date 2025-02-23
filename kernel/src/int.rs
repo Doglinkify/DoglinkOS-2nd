@@ -45,6 +45,7 @@ pub extern "x86-interrupt" fn handler1(_: InterruptStackFrame) {
             "push rbx",
             "push rax",
             "mov rdi, rsp",
+            "mov rsi, 0",
             "call {}",
             "pop rax",
             "pop rbx",

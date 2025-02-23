@@ -5,7 +5,7 @@ use x86_64::PhysAddr;
 
 pub static CURRENT_TASK_ID: AtomicUsize = AtomicUsize::new(0);
 
-pub fn switch_to(context: *mut super::process::ProcessContext, next: usize) {
+pub fn switch_to(context: *mut super::process::ProcessContext, next: usize, current_process_exited: bool) {
     let current = CURRENT_TASK_ID.load(Ordering::Relaxed);
     let flags = Cr3::read().1;
     let new_cr3_va;
@@ -23,7 +23,9 @@ pub fn switch_to(context: *mut super::process::ProcessContext, next: usize) {
     }
     {
         let mut tasks = super::process::TASKS.lock();
-        tasks[current].as_mut().unwrap().context = unsafe { *context };
+        if !current_process_exited {
+            tasks[current].as_mut().unwrap().context = unsafe { *context };
+        }
         unsafe {
             *context = tasks[next].as_ref().unwrap().context;
         }
@@ -31,7 +33,7 @@ pub fn switch_to(context: *mut super::process::ProcessContext, next: usize) {
     }
 }
 
-pub extern "C" fn schedule(context: *mut super::process::ProcessContext) {
+pub extern "C" fn schedule(context: *mut super::process::ProcessContext, current_process_exited: bool) {
     x86_64::instructions::interrupts::disable();
     let mut max_tm = 0;
     let mut max_tid = 127;
@@ -59,7 +61,7 @@ pub extern "C" fn schedule(context: *mut super::process::ProcessContext) {
         }
         tasks[max_tid].as_mut().unwrap().tm -= 1;
     }
-    switch_to(context, max_tid);
+    switch_to(context, max_tid, current_process_exited);
     x86_64::instructions::interrupts::enable();
     crate::apic::local::eoi();
 }

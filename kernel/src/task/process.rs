@@ -14,6 +14,8 @@ use x86_64::addr::VirtAddr;
 use x86_64::structures::paging::frame::PhysFrame;
 use x86_64::structures::paging::Mapper;
 use x86_64::structures::paging::mapper::CleanUp;
+use spin::Lazy;
+use x86_64::registers::control::Cr3Flags;
 
 #[derive(Default, Copy, Clone, Debug)]
 #[repr(C)]
@@ -47,6 +49,10 @@ pub struct Process<'a> {
     pub tm: u64,
 }
 
+pub static original_kernel_cr3: Lazy<(PhysFrame, Cr3Flags)> = Lazy::new(||
+    Cr3::read()
+);
+
 impl<'a> Process<'a> {
     pub fn task_0() -> Self {
         Process {
@@ -60,7 +66,7 @@ impl<'a> Process<'a> {
         let p4t_pa = alloc_physical_page().unwrap();
         let p4t_va = phys_to_virt(p4t_pa);
         let p4t = unsafe { &mut *(p4t_va as *mut PageTable) };
-        let kernel_p4t = unsafe { &mut *(phys_to_virt(Cr3::read().0.start_address().as_u64()) as *mut PageTable) };
+        let kernel_p4t = unsafe { &mut *(phys_to_virt(original_kernel_cr3.0.start_address().as_u64()) as *mut PageTable) };
         Self::r_copy(kernel_p4t, p4t, 4, false, false);
         let page_table = unsafe { OffsetPageTable::new(p4t, x86_64::addr::VirtAddr::new_truncate(phys_to_virt(0))) };
         page_table
@@ -157,11 +163,12 @@ impl<'a> Process<'a> {
                 if !user_only || is_user_page { // when user_only is set,  only use page_decref on user pages
                     let addr = entry.addr().as_u64();
                     entry.set_unused();
-                    //crate::println!("[DEBUG] will call page_decref on 0x{:x}", addr);
-                    crate::mm::page_alloc::page_decref(addr);
-                    if crate::mm::page_alloc::page_getref(addr) == 0 {
-                        //crate::println!("[DEBUG] will call dealloc_physical_page on 0x{:x}", addr);
-                        crate::mm::page_alloc::dealloc_physical_page(addr);
+                    if is_user_page {
+                        crate::mm::page_alloc::page_decref(addr);
+                        if crate::mm::page_alloc::page_getref(addr) == 0 {
+                            //crate::println!("[DEBUG] will call dealloc_physical_page on 0x{:x}", addr);
+                            crate::mm::page_alloc::dealloc_physical_page(addr);
+                        }
                     }
                 }
                 continue;
@@ -243,4 +250,15 @@ pub fn do_exec(args: *mut ProcessContext) {
         (*args).rip = new_elf.entry;
         (*args).rsp = 0x80000000;
     }
+}
+
+pub fn do_exit(args: *mut ProcessContext) {
+    let c_tid = super::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
+    crate::println!("[DEBUG] task: process {c_tid} exited");
+    {
+        let mut tasks = TASKS.lock();
+        tasks[c_tid].as_mut().unwrap().free_page_tables(false);
+        tasks[c_tid] = None;
+    }
+    super::sched::schedule(args, true);
 }

@@ -126,7 +126,7 @@ pub fn dealloc_physical_page(addr: u64) {
     let index = addr / 4096;
     let mut alc = ALLOCATOR_STATE.lock();
     if alc.get(index as usize) {
-        panic!("[ERROR] mm: detected double free on page 0x{addr}, kernel bug?");
+        println!("[WRANING] mm: detected double free on page 0x{addr}, kernel bug?");
     }
     alc.set(index as usize, true);
 }

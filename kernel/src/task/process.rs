@@ -178,7 +178,9 @@ impl<'a> Process<'a> {
                 let new_pa = entry.addr().as_u64();
                 let new_target = unsafe { &mut *(phys_to_virt(new_pa) as *mut PageTable) };
                 Self::r_free(new_target, level - 1, user_only, target_is_user_page);
+                entry.set_unused(); // fuck. i forgot this before
             }
+            // fuck. the above line was written here
         }
     }
 }

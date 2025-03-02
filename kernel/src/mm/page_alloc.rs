@@ -92,6 +92,25 @@ pub fn init() {
     Lazy::force(&ALLOCATOR_STATE);
 }
 
+pub fn find_heap_mem() -> u64 {
+    let mut current_size = 0;
+    let mut state = ALLOCATOR_STATE.lock();
+    let limit = state.len();
+    for i in 0..limit {
+        if state.get(i) {
+            current_size += 1;
+        } else {
+            if current_size == 2048 {
+                state.set_range(i - 2048, i, false);
+                return ((i - 2048) * 4096) as u64;
+            } else {
+                current_size = 0;
+            }
+        }
+    }
+    0
+}
+
 pub fn alloc_physical_page() -> Option<u64> {
     let mut allocator_state = ALLOCATOR_STATE.lock();
     for i in 0..allocator_state.len() {

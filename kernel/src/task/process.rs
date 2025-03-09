@@ -13,7 +13,6 @@ use x86_64::structures::paging::page::Size4KiB;
 use x86_64::addr::VirtAddr;
 use x86_64::structures::paging::frame::PhysFrame;
 use x86_64::structures::paging::Mapper;
-use x86_64::structures::paging::mapper::CleanUp;
 use spin::Lazy;
 use x86_64::registers::control::Cr3Flags;
 
@@ -131,24 +130,10 @@ impl<'a> Process<'a> {
     }
 
     pub fn free_page_tables(&mut self, user_only: bool) {
-        {
-            let target_table = self.page_table.level_4_table_mut();
-            Self::r_free(target_table, 4, user_only, false);
-        }
-        if user_only {
-            unsafe {
-                self.page_table.clean_up_addr_range(
-                    Page::range_inclusive(
-                        Page::containing_address(VirtAddr::new_truncate(0)),
-                        Page::containing_address(VirtAddr::new_truncate(0x00007fffffffffff))
-                    ),
-                    &mut crate::mm::page_alloc::DLOSFrameDeallocator,
-                );
-            }
-        } else {
-            unsafe {
-                self.page_table.clean_up(&mut crate::mm::page_alloc::DLOSFrameDeallocator);
-            }
+        let target_table = self.page_table.level_4_table_mut();
+        Self::r_free(target_table, 4, user_only, false);
+        if !user_only {
+            crate::mm::page_alloc::dealloc_physical_page(target_table as *const _ as u64 - phys_to_virt(0));
         }
     }
 
@@ -179,8 +164,9 @@ impl<'a> Process<'a> {
                 let new_target = unsafe { &mut *(phys_to_virt(new_pa) as *mut PageTable) };
                 Self::r_free(new_target, level - 1, user_only, target_is_user_page);
                 entry.set_unused(); // fuck. i forgot this before
+                crate::mm::page_alloc::dealloc_physical_page(new_pa);
             }
-            // fuck. the above line was written here
+            // fuck. the above set_unused() line was written here
         }
     }
 }
@@ -224,7 +210,8 @@ pub fn do_exec(args: *mut ProcessContext) {
     for ph in new_elf.program_headers {
         if ph.p_type == goblin::elf::program_header::PT_LOAD {
             let start_va = VirtAddr::new_truncate(ph.p_vaddr);
-            let end_va = VirtAddr::new_truncate(ph.p_vaddr + ph.p_memsz);
+            let end_va = VirtAddr::new_truncate(ph.p_vaddr + ph.p_memsz - 1);
+            // crate::println!("[DEBUG] sys_exec: {start_va:?} - {end_va:?}");
             for page in Page::range_inclusive(Page::<Size4KiB>::containing_address(start_va), Page::<Size4KiB>::containing_address(end_va)) {
                 let allocated_pa = alloc_physical_page().unwrap();
                 unsafe {
@@ -236,6 +223,8 @@ pub fn do_exec(args: *mut ProcessContext) {
                     ).map(|r| {
                         r.flush();
                         crate::mm::page_alloc::page_incref(allocated_pa);
+                    }).map_err(|_| {
+                        crate::mm::page_alloc::dealloc_physical_page(allocated_pa);
                     });
                 }
             }
@@ -256,7 +245,7 @@ pub fn do_exec(args: *mut ProcessContext) {
 
 pub fn do_exit(args: *mut ProcessContext) {
     let c_tid = super::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
-    crate::println!("[DEBUG] task: process {c_tid} exited");
+    // crate::println!("[DEBUG] task: process {c_tid} exited");
     {
         let mut tasks = TASKS.lock();
         tasks[c_tid].as_mut().unwrap().free_page_tables(false);

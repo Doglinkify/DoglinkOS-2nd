@@ -49,9 +49,9 @@ extern "C" fn _start() {
         core::arch::asm!(
             "int 0x80",
             in("rax") 3, // sys_exec
-            in("rdi") "/infinite-loop".as_ptr(),
-            in("rcx") "/infinite-loop".len(),
+            in("rdi") "/exiter".as_ptr(),
+            in("rcx") "/exiter".len(),
         );
-        unreachable!();
+        loop {}
     }
 }

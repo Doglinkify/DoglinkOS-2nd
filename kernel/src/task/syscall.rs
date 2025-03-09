@@ -80,6 +80,7 @@ pub fn sys_write(args: *mut SyscallStackFrame) {
         let a = *args;
         (a.rdi, a.rsi, a.rcx)
     };
+    // println!("[DEBUG] sys_write: to {fd} ptr 0x{ptr:x} size {size}");
     if fd > 1 {
         panic!("invalid fd {}", fd);
     } else {

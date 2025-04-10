@@ -52,9 +52,7 @@ pub extern "C" fn schedule(context: *mut super::process::ProcessContext, current
         if max_tid == 127 {
             for tid in 0..64 {
                 if let Some(ref mut process) = tasks[tid] {
-                    if tid != CURRENT_TASK_ID.load(Ordering::Relaxed) {
-                        process.tm = 10;
-                    }
+                    process.tm = 10;
                 }
             }
             max_tid = 0;

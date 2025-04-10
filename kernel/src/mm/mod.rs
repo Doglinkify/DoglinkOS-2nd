@@ -21,7 +21,7 @@ pub fn init() {
         *offset.lock() = res.offset();
     }
     self::page_alloc::init();
-    let heap_start_address = phys_to_virt(self::page_alloc::find_heap_mem());
+    let heap_start_address = phys_to_virt(self::page_alloc::find_continuous_mem(2048));
     unsafe {
         ALLOCATOR.init(heap_start_address as usize, 8 * 1024 * 1024);
     }

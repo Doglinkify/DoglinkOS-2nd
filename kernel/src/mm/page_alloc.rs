@@ -92,7 +92,7 @@ pub fn init() {
     Lazy::force(&ALLOCATOR_STATE);
 }
 
-pub fn find_heap_mem() -> u64 {
+pub fn find_continuous_mem(cnt: usize) -> u64 {
     let mut current_size = 0;
     let mut state = ALLOCATOR_STATE.lock();
     let limit = state.len();
@@ -100,9 +100,9 @@ pub fn find_heap_mem() -> u64 {
         if state.get(i) {
             current_size += 1;
         } else {
-            if current_size == 2048 {
-                state.set_range(i - 2048, i, false);
-                return ((i - 2048) * 4096) as u64;
+            if current_size == cnt {
+                state.set_range(i - cnt, i, false);
+                return ((i - cnt) * 4096) as u64;
             } else {
                 current_size = 0;
             }

@@ -57,7 +57,7 @@ impl<'a> Process<'a> {
         Process {
             page_table: Self::t0_p4_table(),
             context: ProcessContext::default(),
-            tm: 0,
+            tm: 10,
         }
     }
 
@@ -199,12 +199,6 @@ pub fn do_exec(args: *mut ProcessContext) {
     current_task.free_page_tables(true);
     let mut buf = alloc::vec![0u8; size as usize];
     elf_file.read_exact(buf.as_mut_slice()).unwrap();
-    {
-        let mut hash: u64 = 0;
-        for byte in &buf {
-            hash = hash * 3131 + *byte as u64;
-        }
-    }
     let new_elf = goblin::elf::Elf::parse(buf.as_slice());
     let new_elf = new_elf.unwrap(); // strange, but necessary
     for ph in new_elf.program_headers {

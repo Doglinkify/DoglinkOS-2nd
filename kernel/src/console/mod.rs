@@ -5,6 +5,7 @@ use os_terminal::{Terminal, font::BitmapFont};
 use framebuffer::{FrameBuffer, FRAMEBUFFER_REQUEST};
 use alloc::boxed::Box;
 use core::fmt::Write;
+use crossbeam_queue::ArrayQueue;
 
 pub static TERMINAL: Lazy<Mutex<Terminal<FrameBuffer>>> = Lazy::new(|| {
     let framebuffer_response = FRAMEBUFFER_REQUEST.get_response().unwrap();
@@ -14,6 +15,8 @@ pub static TERMINAL: Lazy<Mutex<Terminal<FrameBuffer>>> = Lazy::new(|| {
     terminal.set_history_size(200);
     Mutex::new(terminal)
 });
+
+pub static INPUT_BUFFER: Lazy<ArrayQueue<u8>> = Lazy::new(|| ArrayQueue::new(128));
 
 pub fn init() {
     Lazy::force(&TERMINAL);

@@ -54,3 +54,23 @@ pub fn sys_exit() -> ! {
         unreachable!();
     }
 }
+
+fn raw_sys_read() -> u8 {
+    let result: u64;
+    unsafe {
+        core::arch::asm!(
+            "int 0x80",
+            in("rax") 5,
+            out("rcx") result,
+        );
+    }
+    result as u8
+}
+
+pub fn sys_read() -> u8 {
+    let mut ch = raw_sys_read();
+    while ch == 0xff {
+        ch = raw_sys_read();
+    }
+    ch
+}

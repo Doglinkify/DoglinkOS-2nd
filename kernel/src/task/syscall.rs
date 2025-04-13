@@ -46,7 +46,7 @@ pub extern "x86-interrupt" fn syscall_handler(_: InterruptStackFrame) {
     }
 }
 
-const NUM_SYSCALLS: usize = 5;
+const NUM_SYSCALLS: usize = 6;
 
 const SYSCALL_TABLE: [fn (*mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_test,
@@ -54,6 +54,7 @@ const SYSCALL_TABLE: [fn (*mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_fork,
     sys_exec,
     sys_exit,
+    sys_read,
 ];
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -111,4 +112,14 @@ pub fn sys_exec(args: *mut SyscallStackFrame) {
 
 pub fn sys_exit(args: *mut SyscallStackFrame) {
     super::process::do_exit(args);
+}
+
+pub fn sys_read(args: *mut SyscallStackFrame) {
+    let res = match crate::console::INPUT_BUFFER.pop() {
+        Some(val) => val,
+        None => 0xff,
+    };
+    unsafe {
+        (*args).rcx = res as u64;
+    }
 }

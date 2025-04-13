@@ -35,13 +35,13 @@ impl FrameBuffer {
 
 impl DrawTarget for FrameBuffer {
     fn size(&self) -> (usize, usize) {
-        (self.width as usize, self.height as usize)
+        (self.width, self.height)
     }
 
     #[inline(always)]
     fn draw_pixel(&mut self, x: usize, y: usize, color: Rgb) {
         unsafe {
-            *((self.addr as * mut u8).offset((y * self.pitch + x * 4) as isize) as *mut u32) =
+            *((self.addr as * mut u8).add(y * self.pitch + x * 4) as *mut u32) =
                 ((color.0 as u32) << 16) + ((color.1 as u32) << 8) + (color.2 as u32);
         }
     }

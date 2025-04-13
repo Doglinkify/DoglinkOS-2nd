@@ -32,6 +32,7 @@ static _END_MARKER: RequestsEndMarker = RequestsEndMarker::new();
 
 #[no_mangle]
 #[allow(named_asm_labels)]
+#[allow(clippy::empty_loop)]
 extern "C" fn kmain() -> ! {
     assert!(BASE_REVISION.is_supported());
     init_mm();
@@ -95,6 +96,7 @@ fn rust_panic(info: &core::panic::PanicInfo) -> ! {
     hang();
 }
 
+#[allow(clippy::empty_loop)]
 fn hang() -> ! {
     loop {}
 }

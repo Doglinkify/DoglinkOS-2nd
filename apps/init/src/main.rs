@@ -52,6 +52,6 @@ extern "C" fn _start() {
             in("rdi") "/exiter".as_ptr(),
             in("rcx") "/exiter".len(),
         );
-        loop {}
+        unreachable!();
     }
 }

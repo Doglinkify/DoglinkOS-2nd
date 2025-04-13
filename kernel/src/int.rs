@@ -87,6 +87,7 @@ pub extern "x86-interrupt" fn handler4(_: InterruptStackFrame) {
     crate::apic::local::eoi();
 }
 
+#[allow(clippy::empty_loop)]
 pub extern "x86-interrupt" fn handler5(f: InterruptStackFrame, code: PageFaultErrorCode) {
     match f.code_segment.rpl() {
         PrivilegeLevel::Ring0 => {
@@ -103,6 +104,7 @@ pub extern "x86-interrupt" fn handler5(f: InterruptStackFrame, code: PageFaultEr
     }
 }
 
+#[allow(clippy::empty_loop)]
 pub extern "x86-interrupt" fn handler6(f: InterruptStackFrame, c: u64) {
     println!("general protection fault, caused by instruction at {:?}, code: {}", f.instruction_pointer, c);
     loop{}

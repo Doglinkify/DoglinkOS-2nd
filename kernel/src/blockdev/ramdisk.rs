@@ -59,18 +59,11 @@ impl Write for RamDisk {
 
 impl Seek for RamDisk {
     fn seek(&mut self, frm: SeekFrom) -> Result<u64, Self::Error> {
-        let new_pos: i64;
-        match frm {
-            SeekFrom::Start(offset) => {
-                new_pos = offset as i64;
-            },
-            SeekFrom::End(offset) => {
-                new_pos = (self.size_in_blocks * 512) as i64 + offset;
-            },
-            SeekFrom::Current(offset) => {
-                new_pos = self.cur_pos as i64 + offset;
-            }
-        }
+        let new_pos = match frm {
+            SeekFrom::Start(offset) => offset as i64,
+            SeekFrom::End(offset) => (self.size_in_blocks * 512) as i64 + offset,
+            SeekFrom::Current(offset) => self.cur_pos as i64 + offset,
+        };
         if new_pos < 0 || new_pos > (self.size_in_blocks * 512) as i64 {
             Err(Error::Io(()))
         } else {

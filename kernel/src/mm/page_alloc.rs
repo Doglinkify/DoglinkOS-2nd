@@ -100,12 +100,11 @@ pub fn find_continuous_mem(cnt: usize) -> u64 {
         if state.get(i) {
             current_size += 1;
         } else {
-            if current_size == cnt {
-                state.set_range(i - cnt, i, false);
-                return ((i - cnt) * 4096) as u64;
-            } else {
-                current_size = 0;
-            }
+            current_size = 0;
+        }
+        if current_size == cnt {
+            state.set_range(i - cnt + 1, i + 1, false);
+            return ((i - cnt + 1) * 4096) as u64;
         }
     }
     0
@@ -167,19 +166,19 @@ impl FrameDeallocator<Size4KiB> for DLOSFrameDeallocator {
 
 pub fn test() {
     let mut addresses = [0u64; 10];
-    for i in 0..10 {
-        addresses[i] = alloc_physical_page().unwrap();
-        println!("[DEBUG] page_alloc: Allocation #1-{}: 0x{:x}", i, addresses[i]);
+    for (i, itm) in addresses.iter_mut().enumerate() {
+        *itm = alloc_physical_page().unwrap();
+        println!("[DEBUG] page_alloc: Allocation #1-{}: 0x{:x}", i, *itm);
     }
-    for i in 0..10 {
-        dealloc_physical_page(addresses[i]);
+    for itm in &addresses {
+        dealloc_physical_page(*itm);
     }
-    for i in 0..10 {
-        addresses[i] = alloc_physical_page().unwrap();
-        println!("[DEBUG] page_alloc: Allocation #2-{}: 0x{:x}", i, addresses[i]);
+    for (i, itm) in addresses.iter_mut().enumerate() {
+        *itm = alloc_physical_page().unwrap();
+        println!("[DEBUG] page_alloc: Allocation #2-{}: 0x{:x}", i, *itm);
     }
-    for i in 0..10 {
-        dealloc_physical_page(addresses[i]);
+    for itm in &addresses {
+        dealloc_physical_page(*itm);
     }
 }
 

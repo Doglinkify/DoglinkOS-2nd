@@ -48,11 +48,9 @@ pub struct Process<'a> {
     pub tm: u64,
 }
 
-pub static original_kernel_cr3: Lazy<(PhysFrame, Cr3Flags)> = Lazy::new(||
-    Cr3::read()
-);
+pub static original_kernel_cr3: Lazy<(PhysFrame, Cr3Flags)> = Lazy::new(Cr3::read);
 
-impl<'a> Process<'a> {
+impl Process<'_> {
     pub fn task_0() -> Self {
         Process {
             page_table: Self::t0_p4_table(),
@@ -112,6 +110,7 @@ impl<'a> Process<'a> {
         }
     }
 
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn copy_process(&mut self, context: *mut ProcessContext, new_tid: usize) -> Self {
         let p4t_pa = alloc_physical_page().unwrap();
         let p4t_va = phys_to_virt(p4t_pa);
@@ -173,6 +172,7 @@ impl<'a> Process<'a> {
 
 pub static TASKS: Mutex<[Option<Process>; 64]> = Mutex::new([const { None }; 64]);
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn do_fork(context: *mut ProcessContext) {
     static mut next_tid: usize = 0;
     unsafe {
@@ -183,6 +183,7 @@ pub fn do_fork(context: *mut ProcessContext) {
     tasks[unsafe { next_tid }] = Some(new_process);
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn do_exec(args: *mut ProcessContext) {
     let path = unsafe {
         let slice = core::slice::from_raw_parts((*args).rdi as *const _, (*args).rcx as usize);
@@ -237,6 +238,7 @@ pub fn do_exec(args: *mut ProcessContext) {
     }
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn do_exit(args: *mut ProcessContext) {
     let c_tid = super::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
     // crate::println!("[DEBUG] task: process {c_tid} exited");

@@ -22,7 +22,7 @@ impl AcpiHandler for Handler {
             let virtual_address = crate::mm::phys_to_virt(physical_address as u64);
             NonNull::new_unchecked(virtual_address as *mut T)
         };
-        PhysicalMapping::new(physical_address, va, size, size, self.clone())
+        PhysicalMapping::new(physical_address, va, size, size, *self)
     }
 
     fn unmap_physical_region<T>(_region: &PhysicalMapping<Self, T>) {}

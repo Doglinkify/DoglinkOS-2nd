@@ -16,42 +16,15 @@ unsafe impl Sync for Globals {}
 static TEST: Globals = Globals { t: vcell::VolatileCell::new(0) };
 
 #[unsafe(no_mangle)]
-extern "C" fn _start() {
-    unsafe {
-        core::arch::asm!(
-            "int 0x80",
-            in("rax") 1, // sys_write
-            in("rdi") 0, // stderr
-            in("rsi") "Hello, ELF!\n".as_ptr(),
-            in("rcx") "Hello, ELF!\n".len(),
-        );
-        let fork_result: u64;
-        core::arch::asm!(
-            "int 0x80",
-            in("rax") 2, // sys_fork
-            out("rcx") fork_result,
-        );
-        if fork_result == 0 {
-            // child
-            TEST.t.set(5);
-        } else {
-            // parent
-            TEST.t.set(4);
-        }
-        while TEST.t.get() == 0 {}
-        core::arch::asm!(
-            "int 0x80",
-            in("rax") 1, // sys_write
-            in("rdi") 0, // stderr
-            in("rsi") if TEST.t.get() == 5 { "Now TEST is 5!\n".as_ptr() } else { "Now TEST is 4!\n".as_ptr() },
-            in("rcx") "Now TEST is 5!\n".len(),
-        );
-        core::arch::asm!(
-            "int 0x80",
-            in("rax") 3, // sys_exec
-            in("rdi") "/exiter".as_ptr(),
-            in("rcx") "/exiter".len(),
-        );
-        unreachable!();
+extern "C" fn _start() -> ! {
+    dlos_app_rt::sys_write(0, "Hello, ELF!\n");
+    if dlos_app_rt::sys_fork() == 0 {
+        // child
+        TEST.t.set(5);
+    } else {
+        // parent
+        TEST.t.set(4);
     }
+    dlos_app_rt::sys_write(0, if TEST.t.get() == 5 { "Now TEST is 5!\n" } else { "Now TEST is 4!\n" });
+    dlos_app_rt::sys_exec("/exiter");
 }

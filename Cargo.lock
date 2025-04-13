@@ -233,9 +233,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "dlos-app-rt"
+version = "0.1.0"
+
+[[package]]
 name = "doglinked"
 version = "0.1.0"
 dependencies = [
+ "dlos-app-rt",
  "vcell",
 ]
 
@@ -508,6 +513,9 @@ dependencies = [
 [[package]]
 name = "infinite-loop"
 version = "0.1.0"
+dependencies = [
+ "dlos-app-rt",
+]
 
 [[package]]
 name = "libc"

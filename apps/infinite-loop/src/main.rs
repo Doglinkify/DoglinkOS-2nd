@@ -8,11 +8,5 @@ fn rust_panic(_: &core::panic::PanicInfo) -> ! {
 
 #[unsafe(no_mangle)]
 extern "C" fn _start() -> ! {
-    unsafe {
-        core::arch::asm!(
-            "int 0x80",
-            in("rax") 4, // sys_exit
-        );
-        unreachable!();
-    }
+    dlos_app_rt::sys_exit();
 }

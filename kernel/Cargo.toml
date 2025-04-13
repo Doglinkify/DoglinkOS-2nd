@@ -5,14 +5,14 @@ edition = "2021"
 
 [dependencies]
 good_memory_allocator = "0.1.7"
-limine = "0.3.1"
-noto-sans-mono-bitmap = "0.3.1"
+limine = "0.4.0"
 raw-cpuid = "11.3.0"
 spin = "0.9.8"
 x2apic = "0.4.3"
 x86_64 = "0.15.2"
-os-terminal = "0.5.8"
+os-terminal = "0.6.7"
 fatfs = { git = "https://github.com/rafalh/rust-fatfs", rev = "c4bb76929eb115f228720631b4110f827b998653", default-features = false, features = ["alloc", "lfn"] }
 bit_field = "0.10.2"
-acpi = "5.1.0"
+acpi = "5.2.0"
 goblin = { version = "0.9.3", default-features = false, features = ["elf64","elf32","endian_fd"] }
+crossbeam-queue = { version = "0.3.12", default-features = false, features = ["alloc"] }

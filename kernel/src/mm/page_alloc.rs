@@ -82,7 +82,7 @@ pub fn get_entry_type_string(entry: &limine::memory_map::Entry) -> &str {
         limine::memory_map::EntryType::ACPI_NVS => {"ACPI_NVS"},
         limine::memory_map::EntryType::BAD_MEMORY => {"BAD_MEMORY"},
         limine::memory_map::EntryType::BOOTLOADER_RECLAIMABLE => {"BOOTLOADER_RECLAIMABLE"},
-        limine::memory_map::EntryType::KERNEL_AND_MODULES => {"KERNEL_AND_MODULES"},
+        limine::memory_map::EntryType::EXECUTABLE_AND_MODULES => {"EXECUTABLE_AND_MODULES"},
         limine::memory_map::EntryType::FRAMEBUFFER => {"FRAMEBUFFER"},
         _ => {"UNK"}
     }

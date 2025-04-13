@@ -19,7 +19,7 @@ use DoglinkOS_2nd::println;
 
 #[used]
 #[link_section = ".requests"]
-static BASE_REVISION: BaseRevision = BaseRevision::new();
+static BASE_REVISION: BaseRevision = BaseRevision::with_revision(2);
 
 /// Define the stand and end markers for Limine requests.
 #[used]

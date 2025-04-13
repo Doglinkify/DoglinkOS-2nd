@@ -1,6 +1,5 @@
 #![no_std]
 #![feature(abi_x86_interrupt)]
-#![feature(slice_take)]
 #![feature(array_ptr_get)]
 #![feature(naked_functions)]
 #![allow(non_snake_case)]

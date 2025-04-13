@@ -1,7 +1,8 @@
 use bit_field::BitField;
 
-pub struct PageMan(&'static mut [usize], &'static mut [u8]);
+pub struct PageMan(pub &'static mut [usize], &'static mut [u8]);
 
+#[allow(clippy::len_without_is_empty)]
 impl PageMan {
     pub fn calc_size(len: u64) -> (u64, u64, u64) {
         let tmp = len.div_ceil(64);

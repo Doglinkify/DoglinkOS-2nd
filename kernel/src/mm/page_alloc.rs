@@ -1,7 +1,6 @@
 use limine::request::MemoryMapRequest;
 use crate::println;
 use crate::mm::bitmap::PageMan;
-use super::convert_unit;
 use super::phys_to_virt;
 use spin::{Mutex, Lazy};
 use x86_64::structures::paging::FrameAllocator;
@@ -19,7 +18,7 @@ use x86_64::structures::paging::PageTableFlags;
 #[link_section = ".requests"]
 static MMAP_REQUEST: MemoryMapRequest = MemoryMapRequest::new();
 
-static ALLOCATOR_STATE: Lazy<Mutex<PageMan>> = Lazy::new(|| {
+pub static ALLOCATOR_STATE: Lazy<Mutex<PageMan>> = Lazy::new(|| {
     let res = MMAP_REQUEST.get_response().unwrap();
 
     let usable_mem = res
@@ -32,13 +31,13 @@ static ALLOCATOR_STATE: Lazy<Mutex<PageMan>> = Lazy::new(|| {
         .last()
         .map(|e| e.base + e.length).unwrap();
 
-    let conv_res = convert_unit(max_address);
+    // let conv_res = convert_unit(max_address);
     let total_pages = max_address / 4096;
-    println!("[DEBUG] mm: need to manage {} pages (aka {} {})", total_pages, conv_res.0, conv_res.1);
+    // println!("[DEBUG] mm: need to manage {} pages (aka {} {})", total_pages, conv_res.0, conv_res.1);
 
     let bitmap_size = PageMan::calc_size(total_pages); // unit: (count, count, bytes)
-    let conv_res = convert_unit(bitmap_size.2);
-    println!("[DEBUG] mm: need bitmap size of {} {}", conv_res.0, conv_res.1);
+    // let conv_res = convert_unit(bitmap_size.2);
+    // println!("[DEBUG] mm: need bitmap size of {} {}", conv_res.0, conv_res.1);
 
     let bitmap_address = usable_mem
         .clone()
@@ -54,8 +53,8 @@ static ALLOCATOR_STATE: Lazy<Mutex<PageMan>> = Lazy::new(|| {
         core::slice::from_raw_parts_mut(phys_to_virt(bitmap_address + bitmap_size.0 * 8) as *mut u8, bitmap_size.1 as usize)
     };
 
-    println!("[DEBUG] mm: bitmap_buffer1 is {:?}", bitmap_buffer1.as_ptr());
-    println!("[DEBUG] mm: bitmap_buffer2 is {:?}", bitmap_buffer2.as_ptr());
+    // println!("[DEBUG] mm: bitmap_buffer1 is {:?}", bitmap_buffer1.as_ptr());
+    // println!("[DEBUG] mm: bitmap_buffer2 is {:?}", bitmap_buffer2.as_ptr());
 
     let mut bitmap = PageMan::new(bitmap_buffer1, bitmap_buffer2);
 
@@ -69,9 +68,7 @@ static ALLOCATOR_STATE: Lazy<Mutex<PageMan>> = Lazy::new(|| {
     let bitmap_end_page = bitmap_start_page + bitmap_size.2.div_ceil(4096);
     bitmap.set_range(bitmap_start_page as usize, bitmap_end_page as usize, false);
 
-    println!("[DEBUG] mm: bitmap_end_page is 0x{:x}", bitmap_end_page * 4096);
-
-    bitmap.set_range(32, 2080, false); // kernel heap
+    // println!("[DEBUG] mm: bitmap_end_page is 0x{:x}", bitmap_end_page * 4096);
 
     Mutex::new(bitmap)
 });
@@ -95,6 +92,24 @@ pub fn init() {
     Lazy::force(&ALLOCATOR_STATE);
 }
 
+pub fn find_continuous_mem(cnt: usize) -> u64 {
+    let mut current_size = 0;
+    let mut state = ALLOCATOR_STATE.lock();
+    let limit = state.len();
+    for i in 0..limit {
+        if state.get(i) {
+            current_size += 1;
+        } else {
+            current_size = 0;
+        }
+        if current_size == cnt {
+            state.set_range(i - cnt + 1, i + 1, false);
+            return ((i - cnt + 1) * 4096) as u64;
+        }
+    }
+    0
+}
+
 pub fn alloc_physical_page() -> Option<u64> {
     let mut allocator_state = ALLOCATOR_STATE.lock();
     for i in 0..allocator_state.len() {
@@ -110,7 +125,7 @@ pub fn dealloc_physical_page(addr: u64) {
     let index = addr / 4096;
     let mut alc = ALLOCATOR_STATE.lock();
     if alc.get(index as usize) {
-        panic!("[ERROR] mm: detected double free on page 0x{addr}, kernel bug?");
+        println!("[WRANING] mm: detected double free on page 0x{addr}, kernel bug?");
     }
     alc.set(index as usize, true);
 }
@@ -151,19 +166,19 @@ impl FrameDeallocator<Size4KiB> for DLOSFrameDeallocator {
 
 pub fn test() {
     let mut addresses = [0u64; 10];
-    for i in 0..10 {
-        addresses[i] = alloc_physical_page().unwrap();
-        println!("[DEBUG] page_alloc: Allocation #1-{}: 0x{:x}", i, addresses[i]);
+    for (i, itm) in addresses.iter_mut().enumerate() {
+        *itm = alloc_physical_page().unwrap();
+        println!("[DEBUG] page_alloc: Allocation #1-{}: 0x{:x}", i, *itm);
     }
-    for i in 0..10 {
-        dealloc_physical_page(addresses[i]);
+    for itm in &addresses {
+        dealloc_physical_page(*itm);
     }
-    for i in 0..10 {
-        addresses[i] = alloc_physical_page().unwrap();
-        println!("[DEBUG] page_alloc: Allocation #2-{}: 0x{:x}", i, addresses[i]);
+    for (i, itm) in addresses.iter_mut().enumerate() {
+        *itm = alloc_physical_page().unwrap();
+        println!("[DEBUG] page_alloc: Allocation #2-{}: 0x{:x}", i, *itm);
     }
-    for i in 0..10 {
-        dealloc_physical_page(addresses[i]);
+    for itm in &addresses {
+        dealloc_physical_page(*itm);
     }
 }
 

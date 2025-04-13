@@ -17,10 +17,13 @@ pub static offset: Mutex<u64> = Mutex::new(0);
 
 pub fn init() {
     let res = HHDM_REQUEST.get_response().unwrap();
-    *offset.lock() = res.offset();
-    let heap_address = phys_to_virt(0x20000);
+    {
+        *offset.lock() = res.offset();
+    }
+    self::page_alloc::init();
+    let heap_start_address = phys_to_virt(self::page_alloc::find_continuous_mem(2048));
     unsafe {
-        ALLOCATOR.init(heap_address as usize, 8 * 1024 * 1024);
+        ALLOCATOR.init(heap_start_address as usize, 8 * 1024 * 1024);
     }
 }
 

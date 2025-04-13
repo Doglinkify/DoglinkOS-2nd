@@ -56,6 +56,7 @@ const SYSCALL_TABLE: [fn (*mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_exit,
 ];
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub extern "C" fn do_syscall(args: *mut SyscallStackFrame) {
     let call_num = unsafe { (*args).rax as usize };
     if call_num < NUM_SYSCALLS {
@@ -75,11 +76,13 @@ pub fn sys_test(_: *mut SyscallStackFrame) {
     println!("test syscall");
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn sys_write(args: *mut SyscallStackFrame) {
     let (fd, ptr, size) = unsafe {
         let a = *args;
         (a.rdi, a.rsi, a.rcx)
     };
+    // println!("[DEBUG] sys_write: to {fd} ptr 0x{ptr:x} size {size}");
     if fd > 1 {
         panic!("invalid fd {}", fd);
     } else {
@@ -96,10 +99,12 @@ pub fn sys_write(args: *mut SyscallStackFrame) {
     }
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn sys_fork(args: *mut SyscallStackFrame) {
     super::process::do_fork(args);
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn sys_exec(args: *mut SyscallStackFrame) {
     super::process::do_exec(args);
 }

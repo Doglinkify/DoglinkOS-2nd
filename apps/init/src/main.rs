@@ -1,10 +1,7 @@
 #![no_std]
 #![no_main]
 
-#[panic_handler]
-fn rust_panic(_: &core::panic::PanicInfo) -> ! {
-    loop {}
-}
+use dlos_app_rt::*;
 
 struct Globals {
     pub t: vcell::VolatileCell<i32>
@@ -15,42 +12,52 @@ unsafe impl Sync for Globals {}
 
 static TEST: Globals = Globals { t: vcell::VolatileCell::new(0) };
 
-fn read_word(buf: &mut [u8]) -> usize {
+fn read_line(buf: &mut [u8]) -> usize {
     for i in 0..buf.len() {
         match dlos_app_rt::sys_read() {
-            b' ' | b'\n' => return i,
+            b'\n' => return i,
             c => buf[i] = c,
         }
     }
     buf.len()
 }
 
+fn shell_main_loop() {
+    let mut buf = [0u8; 128];
+    loop {
+        print!("[User@DoglinkOS-2nd /]$ ");
+        let len = read_line(&mut buf);
+        let cmd = str::from_utf8(&buf[..len]).unwrap();
+        if cmd == "" {
+            continue;
+        }
+        if cmd == "panic-test" {
+            panic!("panic test");
+        } else if cmd == "exit" {
+            break;
+        } else if cmd == "sysinfo" {
+            println!("DoglinkOS-2nd version 1.0");
+            println!("DoglinkOS Shell version 1.0");
+            println!("In user mode");
+        } else if &cmd[..4] == "echo" {
+            println!("{}", &cmd[5..]);
+        } else {
+            eprintln!("unknown command");
+        }
+    }
+}
+
 #[unsafe(no_mangle)]
 extern "C" fn _start() -> ! {
-    dlos_app_rt::sys_write(0, "Hello, ELF!\n");
-    dlos_app_rt::sys_write(1, "Please input two words: ");
-    let mut buf1 = [0u8; 64];
-    let mut buf2 = [0u8; 64];
-    let res1 = read_word(&mut buf1);
-    let res2 = read_word(&mut buf2);
-    let ref1 = str::from_utf8(&buf1[..res1]).unwrap();
-    let ref2 = str::from_utf8(&buf2[..res2]).unwrap();
-    dlos_app_rt::sys_write(1, "Result: ");
-    dlos_app_rt::sys_write(1, ref2);
-    dlos_app_rt::sys_write(1, " and ");
-    dlos_app_rt::sys_write(1, ref1);
-    dlos_app_rt::sys_write(1, "\n");
-    if dlos_app_rt::sys_fork() == 0 {
+    sys_write(0, "\n\nDoglinkOS Shell v1.0\n");
+    shell_main_loop();
+    if sys_fork() == 0 {
         // child
         TEST.t.set(5);
     } else {
         // parent
         TEST.t.set(4);
     }
-    if TEST.t.get() == 5  {
-        dlos_app_rt::sys_write(0, "Now TEST is 5!\n");
-        dlos_app_rt::sys_exec("/exiter");
-    }
-    dlos_app_rt::sys_write(0, "Now TEST is 4!\n");
-    dlos_app_rt::sys_exec("/exiter");
+    println!("Now TEST is {}!", TEST.t.get());
+    sys_exec("/exiter");
 }

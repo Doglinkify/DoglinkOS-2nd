@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "DoglinkOS-2nd"
-version = "0.0.2-20250105"
+version = "1.0.0"
 dependencies = [
  "acpi",
  "bit_field",

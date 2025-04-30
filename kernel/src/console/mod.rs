@@ -13,8 +13,16 @@ pub static TERMINAL: Lazy<Mutex<Terminal<FrameBuffer>>> = Lazy::new(|| {
     let mut terminal = Terminal::new(FrameBuffer::from_limine(&framebuffer));
     terminal.set_font_manager(Box::new(BitmapFont));
     terminal.set_history_size(200);
+    terminal.set_crnl_mapping(true);
+    terminal.set_pty_writer(Box::new(|s| {
+        for b in s.as_bytes() {
+            ECHO_BUFFER.force_push(*b);
+        }
+    }));
     Mutex::new(terminal)
 });
+
+pub static ECHO_BUFFER: Lazy<ArrayQueue<u8>> = Lazy::new(|| ArrayQueue::new(128));
 
 pub static INPUT_BUFFER: Lazy<ArrayQueue<u8>> = Lazy::new(|| ArrayQueue::new(128));
 

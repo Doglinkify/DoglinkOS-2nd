@@ -80,12 +80,10 @@ pub extern "x86-interrupt" fn handler4(_: InterruptStackFrame) {
     unsafe {
         let scancode: u8 = x86_64::instructions::port::PortReadOnly::new(0x60).read();
         let mut term = crate::console::TERMINAL.lock();
-        if let Some(s) = term.handle_keyboard(scancode) {
-            let bytes = s.as_bytes();
-            term.process(bytes);
-            for byte in bytes {
-                crate::console::INPUT_BUFFER.force_push(*byte);
-            }
+        term.handle_keyboard(scancode);
+        while let Some(b) = crate::console::ECHO_BUFFER.pop() {
+            term.process(&[b]);
+            crate::console::INPUT_BUFFER.force_push(b);
         }
     }
     crate::apic::local::eoi();

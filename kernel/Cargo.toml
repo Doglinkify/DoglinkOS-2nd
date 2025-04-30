@@ -10,7 +10,7 @@ raw-cpuid = "11.3.0"
 spin = "0.9.8"
 x2apic = "0.4.3"
 x86_64 = "0.15.2"
-os-terminal = "0.5.10"
+os-terminal = "0.6.9"
 fatfs = { git = "https://github.com/rafalh/rust-fatfs", rev = "c4bb76929eb115f228720631b4110f827b998653", default-features = false, features = ["alloc", "lfn"] }
 bit_field = "0.10.2"
 acpi = "5.2.0"

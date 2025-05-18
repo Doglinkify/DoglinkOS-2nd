@@ -28,7 +28,7 @@ pub static ALLOCATOR_STATE: Lazy<Mutex<PageMan>> = Lazy::new(|| {
 
     let max_address = usable_mem
         .clone()
-        .last()
+        .next_back()
         .map(|e| e.base + e.length)
         .unwrap();
 

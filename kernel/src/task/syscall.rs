@@ -117,16 +117,15 @@ pub fn sys_exit(args: *mut SyscallStackFrame) {
     super::process::do_exit(args);
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn sys_read(args: *mut SyscallStackFrame) {
-    let res = match crate::console::INPUT_BUFFER.pop() {
-        Some(val) => val,
-        None => 0xff,
-    };
+    let res = crate::console::INPUT_BUFFER.pop().unwrap_or(0xff);
     unsafe {
         (*args).rcx = res as u64;
     }
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn sys_setfsbase(args: *mut SyscallStackFrame) {
     unsafe {
         println!("sys_setfsbase called with rdi = 0x{:x}", (*args).rdi);

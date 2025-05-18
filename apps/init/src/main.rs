@@ -15,10 +15,10 @@ static TEST: Globals = Globals {
 };
 
 fn read_line(buf: &mut [u8]) -> usize {
-    for i in 0..buf.len() {
+    for (i, v) in buf.iter_mut().enumerate() {
         match dlos_app_rt::sys_read() {
             b'\n' => return i,
-            c => buf[i] = c,
+            c => *v = c,
         }
     }
     buf.len()
@@ -30,7 +30,7 @@ fn shell_main_loop() {
         print!("[User@DoglinkOS-2nd /]$ ");
         let len = read_line(&mut buf);
         let cmd = str::from_utf8(&buf[..len]).unwrap();
-        if cmd == "" {
+        if cmd.is_empty() {
             continue;
         }
         if cmd == "panic-test" {
@@ -41,7 +41,7 @@ fn shell_main_loop() {
             println!("DoglinkOS-2nd version 1.0");
             println!("DoglinkOS Shell version 1.0");
             println!("In user mode");
-        } else if &cmd[..4] == "echo" {
+        } else if cmd.starts_with("echo") {
             println!("{}", &cmd[5..]);
         } else if cmd == "mlibc-test" {
             sys_exec("/mlibc-test");

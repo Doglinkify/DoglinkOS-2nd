@@ -32,8 +32,7 @@ impl AcpiHandler for Handler {
     fn unmap_physical_region<T>(_region: &PhysicalMapping<Self, T>) {}
 }
 
-pub static RSDP_PA: Lazy<usize> =
-    Lazy::new(|| RSDP_REQUEST.get_response().unwrap().address() as usize);
+pub static RSDP_PA: Lazy<usize> = Lazy::new(|| RSDP_REQUEST.get_response().unwrap().address());
 
 pub fn parse_madt() -> u64 {
     println!("[INFO] acpi: parse_madt() called");

@@ -2,9 +2,9 @@ pub mod bitmap;
 pub mod page_alloc;
 pub mod paging;
 
+use good_memory_allocator::SpinLockedAllocator;
 use limine::request::HhdmRequest;
 use spin::Mutex;
-use good_memory_allocator::SpinLockedAllocator;
 
 #[used]
 #[link_section = ".requests"]
@@ -34,7 +34,7 @@ pub fn phys_to_virt(addr: u64) -> u64 {
 pub fn convert_unit(size: u64) -> (f32, &'static str) {
     let mut tf = size as f32;
     let mut level = 0;
-    while tf > 1024.0  {
+    while tf > 1024.0 {
         tf /= 1024.0;
         level += 1;
     }

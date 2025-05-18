@@ -1,8 +1,8 @@
-use core::arch::naked_asm;
 use crate::println;
-use x86_64::structures::idt::InterruptStackFrame;
-use crate::task::process::ProcessContext as SyscallStackFrame;
 use crate::task::process::original_kernel_cr3;
+use crate::task::process::ProcessContext as SyscallStackFrame;
+use core::arch::naked_asm;
+use x86_64::structures::idt::InterruptStackFrame;
 
 #[naked]
 pub extern "x86-interrupt" fn syscall_handler(_: InterruptStackFrame) {
@@ -48,7 +48,7 @@ pub extern "x86-interrupt" fn syscall_handler(_: InterruptStackFrame) {
 
 const NUM_SYSCALLS: usize = 7;
 
-const SYSCALL_TABLE: [fn (*mut SyscallStackFrame); NUM_SYSCALLS] = [
+const SYSCALL_TABLE: [fn(*mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_test,
     sys_write,
     sys_fork,
@@ -62,9 +62,13 @@ const SYSCALL_TABLE: [fn (*mut SyscallStackFrame); NUM_SYSCALLS] = [
 pub extern "C" fn do_syscall(args: *mut SyscallStackFrame) {
     let call_num = unsafe { (*args).rax as usize };
     if call_num < NUM_SYSCALLS {
-        if call_num == 4 { // sys_exit will free the current page table, so switch to original kernel page table
+        if call_num == 4 {
+            // sys_exit will free the current page table, so switch to original kernel page table
             unsafe {
-                x86_64::registers::control::Cr3::write(original_kernel_cr3.0, original_kernel_cr3.1);
+                x86_64::registers::control::Cr3::write(
+                    original_kernel_cr3.0,
+                    original_kernel_cr3.1,
+                );
             }
         }
         SYSCALL_TABLE[call_num](args);
@@ -92,9 +96,7 @@ pub fn sys_write(args: *mut SyscallStackFrame) {
         if fd == 0 {
             term.process(b"\x1b[31m");
         }
-        term.process(unsafe {
-            core::slice::from_raw_parts(ptr as *const u8, size as usize)
-        });
+        term.process(unsafe { core::slice::from_raw_parts(ptr as *const u8, size as usize) });
         if fd == 0 {
             term.process(b"\x1b[0m");
         }

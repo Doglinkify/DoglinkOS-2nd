@@ -4,13 +4,15 @@
 use dlos_app_rt::*;
 
 struct Globals {
-    pub t: vcell::VolatileCell<i32>
+    pub t: vcell::VolatileCell<i32>,
 }
 
 unsafe impl Send for Globals {}
 unsafe impl Sync for Globals {}
 
-static TEST: Globals = Globals { t: vcell::VolatileCell::new(0) };
+static TEST: Globals = Globals {
+    t: vcell::VolatileCell::new(0),
+};
 
 fn read_line(buf: &mut [u8]) -> usize {
     for i in 0..buf.len() {

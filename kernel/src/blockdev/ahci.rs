@@ -1,9 +1,9 @@
-use alloc::vec::Vec;
-use spin::Mutex;
-use bit_field::BitField;
+use crate::mm::phys_to_virt;
 use crate::pcie::enumrate::doit;
 use crate::println;
-use crate::mm::phys_to_virt;
+use alloc::vec::Vec;
+use bit_field::BitField;
+use spin::Mutex;
 
 pub struct Disk;
 
@@ -63,7 +63,10 @@ pub fn get_disks(address: u64) -> Vec<Disk> {
                     0xeb140101 => println!("[INFO] ahci: SATAPI drive found at port {}", i),
                     0xc33c0101 => println!("[INFO] ahci: SEMB drive found at port {}", i),
                     0x96690101 => println!("[INFO] ahci: PM found at port {}", i),
-                    _ => println!("[WARN] ahci: ??? ({:08x}) drive found at port {}", port.signature, i),
+                    _ => println!(
+                        "[WARN] ahci: ??? ({:08x}) drive found at port {}",
+                        port.signature, i
+                    ),
                 }
             }
         }

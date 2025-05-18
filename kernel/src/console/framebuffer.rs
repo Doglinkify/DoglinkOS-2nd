@@ -1,6 +1,6 @@
 use limine::framebuffer::Framebuffer as LimineFrameBuffer;
-use os_terminal::{DrawTarget, Rgb};
 use limine::request::FramebufferRequest;
+use os_terminal::{DrawTarget, Rgb};
 
 #[used]
 #[link_section = ".requests"]
@@ -41,7 +41,7 @@ impl DrawTarget for FrameBuffer {
     #[inline(always)]
     fn draw_pixel(&mut self, x: usize, y: usize, color: Rgb) {
         unsafe {
-            *((self.addr as * mut u8).add(y * self.pitch + x * 4) as *mut u32) =
+            *((self.addr as *mut u8).add(y * self.pitch + x * 4) as *mut u32) =
                 ((color.0 as u32) << 16) + ((color.1 as u32) << 8) + (color.2 as u32);
         }
     }

@@ -9,11 +9,11 @@
 extern crate alloc;
 pub mod acpi;
 pub mod apic;
+pub mod blockdev;
 pub mod console;
 pub mod cpu;
 pub mod int;
 pub mod mm;
 pub mod pcie;
-pub mod blockdev;
 pub mod task;
 pub mod vfs;

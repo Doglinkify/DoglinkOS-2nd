@@ -1,21 +1,21 @@
 #![no_std]
 #![no_main]
 
+use core::arch::asm;
 use limine::request::{RequestsEndMarker, RequestsStartMarker};
 use limine::BaseRevision;
-use core::arch::asm;
-use DoglinkOS_2nd::mm::init as init_mm;
-use DoglinkOS_2nd::console::init as init_terminal;
-use DoglinkOS_2nd::task::{reset_gdt, init as init_task, init_sse};
-use DoglinkOS_2nd::int::init as init_interrupt;
-use DoglinkOS_2nd::apic::{io::init as init_ioapic, local::init as init_lapic};
 use DoglinkOS_2nd::acpi::parse_madt;
-use DoglinkOS_2nd::pcie::enumrate::{init as init_pcie, doit};
-use DoglinkOS_2nd::cpu::show_cpu_info;
+use DoglinkOS_2nd::apic::{io::init as init_ioapic, local::init as init_lapic};
 use DoglinkOS_2nd::blockdev::ahci::init as init_ahci;
+use DoglinkOS_2nd::console::init as init_terminal;
+use DoglinkOS_2nd::cpu::show_cpu_info;
+use DoglinkOS_2nd::int::init as init_interrupt;
+use DoglinkOS_2nd::mm::init as init_mm;
 use DoglinkOS_2nd::mm::page_alloc::test as test_page_alloc;
-use DoglinkOS_2nd::vfs::init as init_vfs;
+use DoglinkOS_2nd::pcie::enumrate::{doit, init as init_pcie};
 use DoglinkOS_2nd::println;
+use DoglinkOS_2nd::task::{init as init_task, init_sse, reset_gdt};
+use DoglinkOS_2nd::vfs::init as init_vfs;
 
 #[used]
 #[link_section = ".requests"]
@@ -37,12 +37,14 @@ extern "C" fn kmain() -> ! {
     assert!(BASE_REVISION.is_supported());
     init_mm();
     init_terminal();
-    println!(r"  ____                   _   _           _       ___    ____            ____                _
+    println!(
+        r"  ____                   _   _           _       ___    ____            ____                _
 |  _ \    ___     __ _  | | (_)  _ __   | | __  / _ \  / ___|          |___ \   _ __     __| |
 | | | |  / _ \   / _` | | | | | | '_ \  | |/ / | | | | \___ \   _____    __) | | '_ \   / _` |
 | |_| | | (_) | | (_| | | | | | | | | | |   <  | |_| |  ___) | |_____|  / __/  | | | | | (_| |
 |____/   \___/   \__, | |_| |_| |_| |_| |_|\_\  \___/  |____/          |_____| |_| |_|  \__,_|
-                 |___/");
+                 |___/"
+    );
     reset_gdt();
     init_interrupt();
     init_lapic();
@@ -81,10 +83,10 @@ fn show_pcie_info() {
     doit(|bus, device, function, config| {
         let vendor_id = config.vendor_id;
         let device_id = config.device_id;
-        println!("[INFO] kmain: found PCIe device: {:02x}:{:02x}.{} {:02x}{:02x}: {:04x}:{:04x}",
-                 bus, device, function,
-                 config.class_code, config.subclass,
-                 vendor_id, device_id);
+        println!(
+            "[INFO] kmain: found PCIe device: {:02x}:{:02x}.{} {:02x}{:02x}: {:04x}:{:04x}",
+            bus, device, function, config.class_code, config.subclass, vendor_id, device_id
+        );
     });
     let mut cnt = 0;
     doit(|_, _, _, _| cnt += 1);

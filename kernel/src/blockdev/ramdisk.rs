@@ -1,4 +1,4 @@
-use fatfs::{IoBase, Read, Write, Seek, Error, SeekFrom};
+use fatfs::{Error, IoBase, Read, Seek, SeekFrom, Write};
 
 pub struct RamDisk {
     size_in_blocks: usize,
@@ -11,7 +11,7 @@ impl RamDisk {
         Self {
             size_in_blocks: size.div_ceil(512) as usize,
             ptr: addr,
-            cur_pos: 0
+            cur_pos: 0,
         }
     }
 }

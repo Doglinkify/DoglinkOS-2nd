@@ -31,7 +31,10 @@ pub fn get_config_space(bus: u8, device: u8, function: u8) -> &'static PCIConfig
     }
 }
 
-pub fn check<F>(bus: u8, device: u8, function: u8, mut hook: F) -> bool where F: FnMut(u8, u8, u8, &PCIConfigSpace) {
+pub fn check<F>(bus: u8, device: u8, function: u8, mut hook: F) -> bool
+where
+    F: FnMut(u8, u8, u8, &PCIConfigSpace),
+{
     let config = get_config_space(bus, device, function);
     if config.vendor_id != 65535 {
         hook(bus, device, function, config);
@@ -43,7 +46,10 @@ pub fn init() {
     *pcie_mmio_base.lock() = phys_to_virt(crate::acpi::parse_mcfg());
 }
 
-pub fn doit<F>(mut hook: F) where F: FnMut(u8, u8, u8, &PCIConfigSpace) {
+pub fn doit<F>(mut hook: F)
+where
+    F: FnMut(u8, u8, u8, &PCIConfigSpace),
+{
     for bus in 0..=255 {
         for device in 0..32 {
             if check(bus, device, 0, &mut hook) {

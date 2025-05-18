@@ -6,7 +6,11 @@ use x86_64::PhysAddr;
 pub static CURRENT_TASK_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub fn switch_to(context: *mut super::process::ProcessContext, next: usize, current_process_exited: bool) {
+pub fn switch_to(
+    context: *mut super::process::ProcessContext,
+    next: usize,
+    current_process_exited: bool,
+) {
     let current = CURRENT_TASK_ID.load(Ordering::Relaxed);
     // crate::println!("scheduler: switching from {current} to {next}");
     let flags = Cr3::read().1;
@@ -15,11 +19,9 @@ pub fn switch_to(context: *mut super::process::ProcessContext, next: usize, curr
         let tasks = super::process::TASKS.lock();
         new_cr3_va = tasks[next].as_ref().unwrap().page_table.level_4_table() as *const _ as u64;
     }
-    let new_cr3 = PhysFrame::from_start_address(
-        PhysAddr::new(
-            new_cr3_va - crate::mm::phys_to_virt(0)
-        )
-    ).unwrap();
+    let new_cr3 =
+        PhysFrame::from_start_address(PhysAddr::new(new_cr3_va - crate::mm::phys_to_virt(0)))
+            .unwrap();
     unsafe {
         Cr3::write(new_cr3, flags);
     }
@@ -44,7 +46,10 @@ pub fn switch_to(context: *mut super::process::ProcessContext, next: usize, curr
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn schedule(context: *mut super::process::ProcessContext, current_process_exited: bool) {
+pub extern "C" fn schedule(
+    context: *mut super::process::ProcessContext,
+    current_process_exited: bool,
+) {
     x86_64::instructions::interrupts::disable();
     let mut max_tm = 0;
     let mut max_tid = 127;

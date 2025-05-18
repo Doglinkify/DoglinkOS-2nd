@@ -1,11 +1,11 @@
 mod framebuffer;
 
-use spin::{Lazy, Mutex};
-use os_terminal::{Terminal, font::BitmapFont};
-use framebuffer::{FrameBuffer, FRAMEBUFFER_REQUEST};
 use alloc::boxed::Box;
 use core::fmt::Write;
 use crossbeam_queue::ArrayQueue;
+use framebuffer::{FrameBuffer, FRAMEBUFFER_REQUEST};
+use os_terminal::{font::BitmapFont, Terminal};
+use spin::{Lazy, Mutex};
 
 pub static TERMINAL: Lazy<Mutex<Terminal<FrameBuffer>>> = Lazy::new(|| {
     let framebuffer_response = FRAMEBUFFER_REQUEST.get_response().unwrap();

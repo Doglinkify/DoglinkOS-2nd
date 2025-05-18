@@ -1,7 +1,7 @@
 use crate::mm::phys_to_virt;
 use crate::println;
-use x2apic::lapic::{xapic_base, LocalApic, LocalApicBuilder, TimerDivide, TimerMode};
 use spin::Mutex;
+use x2apic::lapic::{xapic_base, LocalApic, LocalApicBuilder, TimerDivide, TimerMode};
 
 static LAPIC: Mutex<Option<LocalApic>> = Mutex::new(None);
 
@@ -36,6 +36,6 @@ pub fn init() {
 
 pub fn eoi() {
     unsafe {
-       (*LAPIC.lock()).as_mut().unwrap().end_of_interrupt();
+        (*LAPIC.lock()).as_mut().unwrap().end_of_interrupt();
     }
 }

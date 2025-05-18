@@ -45,17 +45,23 @@ pub struct ProcessContext {
 pub struct Process<'a> {
     pub page_table: OffsetPageTable<'a>,
     pub context: ProcessContext,
+    pub fpu_state: [u128; 32],
     pub tm: u64,
+    pub fs: VirtAddr,
 }
 
 pub static original_kernel_cr3: Lazy<(PhysFrame, Cr3Flags)> = Lazy::new(Cr3::read);
+
+const FPU_INIT: [u128; 32] = [0x037fu128, 0x1f800000000000000000u128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
 impl Process<'_> {
     pub fn task_0() -> Self {
         Process {
             page_table: Self::t0_p4_table(),
             context: ProcessContext::default(),
+            fpu_state: FPU_INIT,
             tm: 10,
+            fs: VirtAddr::new(0),
         }
     }
 
@@ -124,7 +130,9 @@ impl Process<'_> {
         Self {
             page_table: unsafe { OffsetPageTable::new(p4t, x86_64::addr::VirtAddr::new_truncate(phys_to_virt(0))) },
             context: new_context,
+            fpu_state: FPU_INIT,
             tm: 0,
+            fs: VirtAddr::new(0),
         }
     }
 
@@ -234,7 +242,7 @@ pub fn do_exec(args: *mut ProcessContext) {
     // crate::println!("[DEBUG] will set rip to 0x{:x}", new_elf.entry);
     unsafe {
         (*args).rip = new_elf.entry;
-        (*args).rsp = 0x80000000;
+        (*args).rsp = 0x80000000 - 24;
     }
 }
 

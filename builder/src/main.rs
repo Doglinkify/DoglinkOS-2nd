@@ -38,8 +38,8 @@ fn main() {
         let mut cmd = Command::new("qemu-system-x86_64");
 
         let ovmf_path = Prebuilt::fetch(Source::LATEST, "target/ovmf")
-        .expect("failed to update prebuilt")
-        .get_file(Arch::X64, FileType::Code);
+            .expect("failed to update prebuilt")
+            .get_file(Arch::X64, FileType::Code);
         let ovmf_config = format!("if=pflash,format=raw,file={}", ovmf_path.display());
 
         cmd.arg("-machine").arg("q35");
@@ -90,6 +90,7 @@ fn build_img() -> PathBuf {
     let initrd_files = BTreeMap::from([
         ("doglinked", doglinked_path.to_path_buf()),
         ("exiter", t_path.to_path_buf()),
+        ("mlibc-test", assets_dir.join("mlibc-test.elf")),
     ]);
     let initrd_path = manifest_dir.parent().unwrap().join("initrd.img");
     FatBuilder::create(initrd_files, &initrd_path).expect("failed to build initrd.img");

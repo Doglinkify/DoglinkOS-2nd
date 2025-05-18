@@ -1,18 +1,18 @@
-use limine::request::MemoryMapRequest;
-use crate::println;
-use crate::mm::bitmap::PageMan;
 use super::phys_to_virt;
-use spin::{Mutex, Lazy};
+use crate::mm::bitmap::PageMan;
+use crate::println;
+use limine::request::MemoryMapRequest;
+use spin::{Lazy, Mutex};
+use x86_64::addr::PhysAddr;
+use x86_64::registers::control::Cr2;
+use x86_64::structures::idt::PageFaultErrorCode;
+use x86_64::structures::paging::page::Page;
 use x86_64::structures::paging::FrameAllocator;
 use x86_64::structures::paging::FrameDeallocator;
-use x86_64::addr::PhysAddr;
-use x86_64::structures::paging::PhysFrame;
-use x86_64::structures::paging::Size4KiB;
-use x86_64::structures::idt::PageFaultErrorCode;
-use x86_64::registers::control::Cr2;
-use x86_64::structures::paging::page::Page;
 use x86_64::structures::paging::Mapper;
 use x86_64::structures::paging::PageTableFlags;
+use x86_64::structures::paging::PhysFrame;
+use x86_64::structures::paging::Size4KiB;
 
 #[used]
 #[link_section = ".requests"]
@@ -29,15 +29,16 @@ pub static ALLOCATOR_STATE: Lazy<Mutex<PageMan>> = Lazy::new(|| {
     let max_address = usable_mem
         .clone()
         .last()
-        .map(|e| e.base + e.length).unwrap();
+        .map(|e| e.base + e.length)
+        .unwrap();
 
     // let conv_res = convert_unit(max_address);
     let total_pages = max_address / 4096;
     // println!("[DEBUG] mm: need to manage {} pages (aka {} {})", total_pages, conv_res.0, conv_res.1);
 
     let bitmap_size = PageMan::calc_size(total_pages); // unit: (count, count, bytes)
-    // let conv_res = convert_unit(bitmap_size.2);
-    // println!("[DEBUG] mm: need bitmap size of {} {}", conv_res.0, conv_res.1);
+                                                       // let conv_res = convert_unit(bitmap_size.2);
+                                                       // println!("[DEBUG] mm: need bitmap size of {} {}", conv_res.0, conv_res.1);
 
     let bitmap_address = usable_mem
         .clone()
@@ -46,11 +47,17 @@ pub static ALLOCATOR_STATE: Lazy<Mutex<PageMan>> = Lazy::new(|| {
         .unwrap();
 
     let bitmap_buffer1 = unsafe {
-        core::slice::from_raw_parts_mut(phys_to_virt(bitmap_address) as *mut usize, bitmap_size.0 as usize)
+        core::slice::from_raw_parts_mut(
+            phys_to_virt(bitmap_address) as *mut usize,
+            bitmap_size.0 as usize,
+        )
     };
 
     let bitmap_buffer2 = unsafe {
-        core::slice::from_raw_parts_mut(phys_to_virt(bitmap_address + bitmap_size.0 * 8) as *mut u8, bitmap_size.1 as usize)
+        core::slice::from_raw_parts_mut(
+            phys_to_virt(bitmap_address + bitmap_size.0 * 8) as *mut u8,
+            bitmap_size.1 as usize,
+        )
     };
 
     // println!("[DEBUG] mm: bitmap_buffer1 is {:?}", bitmap_buffer1.as_ptr());
@@ -76,15 +83,15 @@ pub static ALLOCATOR_STATE: Lazy<Mutex<PageMan>> = Lazy::new(|| {
 // reserved for future use
 pub fn get_entry_type_string(entry: &limine::memory_map::Entry) -> &str {
     match entry.entry_type {
-        limine::memory_map::EntryType::USABLE => {"USABLE"},
-        limine::memory_map::EntryType::RESERVED => {"RESERVED"},
-        limine::memory_map::EntryType::ACPI_RECLAIMABLE => {"ACPI_RECLAIMABLE"},
-        limine::memory_map::EntryType::ACPI_NVS => {"ACPI_NVS"},
-        limine::memory_map::EntryType::BAD_MEMORY => {"BAD_MEMORY"},
-        limine::memory_map::EntryType::BOOTLOADER_RECLAIMABLE => {"BOOTLOADER_RECLAIMABLE"},
-        limine::memory_map::EntryType::EXECUTABLE_AND_MODULES => {"EXECUTABLE_AND_MODULES"},
-        limine::memory_map::EntryType::FRAMEBUFFER => {"FRAMEBUFFER"},
-        _ => {"UNK"}
+        limine::memory_map::EntryType::USABLE => "USABLE",
+        limine::memory_map::EntryType::RESERVED => "RESERVED",
+        limine::memory_map::EntryType::ACPI_RECLAIMABLE => "ACPI_RECLAIMABLE",
+        limine::memory_map::EntryType::ACPI_NVS => "ACPI_NVS",
+        limine::memory_map::EntryType::BAD_MEMORY => "BAD_MEMORY",
+        limine::memory_map::EntryType::BOOTLOADER_RECLAIMABLE => "BOOTLOADER_RECLAIMABLE",
+        limine::memory_map::EntryType::EXECUTABLE_AND_MODULES => "EXECUTABLE_AND_MODULES",
+        limine::memory_map::EntryType::FRAMEBUFFER => "FRAMEBUFFER",
+        _ => "UNK",
     }
 }
 
@@ -146,13 +153,7 @@ pub struct DLOSFrameAllocator;
 
 unsafe impl FrameAllocator<Size4KiB> for DLOSFrameAllocator {
     fn allocate_frame(&mut self) -> Option<PhysFrame<Size4KiB>> {
-        Some(
-            PhysFrame::from_start_address(
-                PhysAddr::new(
-                    alloc_physical_page().unwrap()
-                )
-            ).unwrap()
-        )
+        Some(PhysFrame::from_start_address(PhysAddr::new(alloc_physical_page().unwrap())).unwrap())
     }
 }
 
@@ -182,18 +183,15 @@ pub fn test() {
     }
 }
 
-pub fn do_user_page_fault(code: PageFaultErrorCode) {
+pub fn do_user_page_fault(ip: x86_64::VirtAddr, code: PageFaultErrorCode) {
     let addr = Cr2::read().unwrap();
     let page = Page::<Size4KiB>::containing_address(addr);
     let current = crate::task::sched::CURRENT_TASK_ID.load(core::sync::atomic::Ordering::Relaxed);
     let mut tasks = crate::task::process::TASKS.lock();
-    let pgt = &mut tasks[current]
-        .as_mut().unwrap()
-        .page_table;
-    if code.contains(PageFaultErrorCode::PROTECTION_VIOLATION | PageFaultErrorCode::CAUSED_BY_WRITE) {
-        let phys_addr = pgt
-            .translate_page(page).unwrap()
-            .start_address().as_u64();
+    let pgt = &mut tasks[current].as_mut().unwrap().page_table;
+    if code.contains(PageFaultErrorCode::PROTECTION_VIOLATION | PageFaultErrorCode::CAUSED_BY_WRITE)
+    {
+        let phys_addr = pgt.translate_page(page).unwrap().start_address().as_u64();
         if page_getref(phys_addr) > 1 {
             let new_page_pa = alloc_physical_page().unwrap();
             let new_page_va = super::phys_to_virt(new_page_pa);
@@ -205,14 +203,25 @@ pub fn do_user_page_fault(code: PageFaultErrorCode) {
                 pgt.map_to(
                     page,
                     PhysFrame::from_start_address(PhysAddr::new(new_page_pa)).unwrap(),
-                    PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
+                    PageTableFlags::PRESENT
+                        | PageTableFlags::WRITABLE
+                        | PageTableFlags::USER_ACCESSIBLE,
                     &mut DLOSFrameAllocator,
-                ).unwrap().flush();
+                )
+                .unwrap()
+                .flush();
                 page_incref(new_page_pa);
             }
         } else {
             unsafe {
-                pgt.update_flags(page, PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE).unwrap().flush();
+                pgt.update_flags(
+                    page,
+                    PageTableFlags::PRESENT
+                        | PageTableFlags::WRITABLE
+                        | PageTableFlags::USER_ACCESSIBLE,
+                )
+                .unwrap()
+                .flush();
             }
         }
     } else if within_stack_range(addr) {
@@ -222,12 +231,17 @@ pub fn do_user_page_fault(code: PageFaultErrorCode) {
             pgt.map_to(
                 page,
                 PhysFrame::from_start_address(PhysAddr::new(new_page_pa)).unwrap(),
-                PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE,
+                PageTableFlags::PRESENT
+                    | PageTableFlags::WRITABLE
+                    | PageTableFlags::USER_ACCESSIBLE,
                 &mut DLOSFrameAllocator,
-            ).unwrap().flush();
+            )
+            .unwrap()
+            .flush();
+            core::ptr::write_bytes(phys_to_virt(new_page_pa) as *mut u8, 0, 4096);
         }
     } else {
-        panic!("unrecoverable user page fault");
+        panic!("unrecoverable user page fault, addr: {addr:?}, code: {code:?}, ip: {ip:?}");
     }
 }
 

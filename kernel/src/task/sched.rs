@@ -26,10 +26,18 @@ pub fn switch_to(context: *mut super::process::ProcessContext, next: usize, curr
     {
         let mut tasks = super::process::TASKS.lock();
         if !current_process_exited {
-            tasks[current].as_mut().unwrap().context = unsafe { *context };
+            let cur = tasks[current].as_mut().unwrap();
+            cur.context = unsafe { *context };
+            cur.fs = x86_64::registers::model_specific::FsBase::read();
+            unsafe {
+                core::arch::x86_64::_fxsave64((&mut cur.fpu_state) as *mut _ as *mut u8);
+            }
         }
         unsafe {
-            *context = tasks[next].as_ref().unwrap().context;
+            let nxt = tasks[next].as_ref().unwrap();
+            *context = nxt.context;
+            x86_64::registers::model_specific::FsBase::write(nxt.fs);
+            core::arch::x86_64::_fxrstor64((&nxt.fpu_state) as *const _ as *const u8);
         }
         CURRENT_TASK_ID.store(next, Ordering::Relaxed);
     }

@@ -41,6 +41,8 @@ fn shell_main_loop() {
             println!("In user mode");
         } else if &cmd[..4] == "echo" {
             println!("{}", &cmd[5..]);
+        } else if cmd == "mlibc-test" {
+            sys_exec("/mlibc-test");
         } else {
             eprintln!("unknown command");
         }

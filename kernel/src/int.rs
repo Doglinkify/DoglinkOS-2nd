@@ -100,7 +100,7 @@ pub extern "x86-interrupt" fn handler5(f: InterruptStackFrame, code: PageFaultEr
             loop {}
         },
         PrivilegeLevel::Ring3 => {
-            crate::mm::page_alloc::do_user_page_fault(code)
+            crate::mm::page_alloc::do_user_page_fault(f.instruction_pointer, code)
         },
         _ => unreachable!() // Ring1 and Ring2 is unused in this kernel
     }

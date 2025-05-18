@@ -46,7 +46,7 @@ pub extern "x86-interrupt" fn syscall_handler(_: InterruptStackFrame) {
     }
 }
 
-const NUM_SYSCALLS: usize = 6;
+const NUM_SYSCALLS: usize = 7;
 
 const SYSCALL_TABLE: [fn (*mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_test,
@@ -55,6 +55,7 @@ const SYSCALL_TABLE: [fn (*mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_exec,
     sys_exit,
     sys_read,
+    sys_setfsbase,
 ];
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -121,5 +122,14 @@ pub fn sys_read(args: *mut SyscallStackFrame) {
     };
     unsafe {
         (*args).rcx = res as u64;
+    }
+}
+
+pub fn sys_setfsbase(args: *mut SyscallStackFrame) {
+    unsafe {
+        println!("sys_setfsbase called with rdi = 0x{:x}", (*args).rdi);
+        use x86_64::VirtAddr;
+        x86_64::registers::model_specific::FsBase::write(VirtAddr::new((*args).rdi));
+        // loop{}
     }
 }

@@ -6,7 +6,7 @@ use limine::BaseRevision;
 use core::arch::asm;
 use DoglinkOS_2nd::mm::init as init_mm;
 use DoglinkOS_2nd::console::init as init_terminal;
-use DoglinkOS_2nd::task::{reset_gdt, init as init_task};
+use DoglinkOS_2nd::task::{reset_gdt, init as init_task, init_sse};
 use DoglinkOS_2nd::int::init as init_interrupt;
 use DoglinkOS_2nd::apic::{io::init as init_ioapic, local::init as init_lapic};
 use DoglinkOS_2nd::acpi::parse_madt;
@@ -53,6 +53,7 @@ extern "C" fn kmain() -> ! {
     show_pcie_info();
     test_page_alloc();
     init_vfs();
+    init_sse();
     init_task();
     println!("[INFO] kmain: all things ok, let's start!");
     let fork_result: u64;

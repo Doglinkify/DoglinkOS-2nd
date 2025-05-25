@@ -1,5 +1,6 @@
 use crate::mm::page_alloc::alloc_physical_page;
 use crate::mm::phys_to_virt;
+use core::cmp::max;
 use core::sync::atomic::Ordering;
 use fatfs::Read;
 use spin::Lazy;
@@ -48,6 +49,7 @@ pub struct Process<'a> {
     pub fpu_state: [u128; 32],
     pub tm: u64,
     pub fs: VirtAddr,
+    pub brk: u64,
 }
 
 pub static original_kernel_cr3: Lazy<(PhysFrame, Cr3Flags)> = Lazy::new(Cr3::read);
@@ -95,6 +97,7 @@ impl Process<'_> {
             fpu_state: FPU_INIT,
             tm: 10,
             fs: VirtAddr::new(0),
+            brk: 0,
         }
     }
 
@@ -181,6 +184,7 @@ impl Process<'_> {
             fpu_state: FPU_INIT,
             tm: 0,
             fs: VirtAddr::new(0),
+            brk: 0,
         }
     }
 
@@ -264,6 +268,10 @@ pub fn do_exec(args: *mut ProcessContext) {
     let mut tasks = TASKS.lock();
     let current_task = tasks[c_tid].as_mut().unwrap();
     current_task.free_page_tables(true);
+    current_task.context = ProcessContext::default();
+    current_task.fpu_state = FPU_INIT;
+    current_task.fs = VirtAddr::zero();
+    current_task.brk = 0;
     let mut buf = alloc::vec![0u8; size as usize];
     elf_file.read_exact(buf.as_mut_slice()).unwrap();
     let new_elf = goblin::elf::Elf::parse(buf.as_slice());
@@ -272,6 +280,7 @@ pub fn do_exec(args: *mut ProcessContext) {
         if ph.p_type == goblin::elf::program_header::PT_LOAD {
             let start_va = VirtAddr::new_truncate(ph.p_vaddr);
             let end_va = VirtAddr::new_truncate(ph.p_vaddr + ph.p_memsz - 1);
+            current_task.brk = max(current_task.brk, ph.p_vaddr + ph.p_memsz);
             // crate::println!("[DEBUG] sys_exec: {start_va:?} - {end_va:?}");
             for page in Page::range_inclusive(
                 Page::<Size4KiB>::containing_address(start_va),
@@ -309,7 +318,7 @@ pub fn do_exec(args: *mut ProcessContext) {
     // crate::println!("[DEBUG] will set rip to 0x{:x}", new_elf.entry);
     unsafe {
         (*args).rip = new_elf.entry;
-        (*args).rsp = 0x80000000 - 24;
+        (*args).rsp = 0x80000000 - 80;
     }
 }
 

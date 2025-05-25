@@ -188,7 +188,8 @@ pub fn do_user_page_fault(ip: x86_64::VirtAddr, code: PageFaultErrorCode) {
     let page = Page::<Size4KiB>::containing_address(addr);
     let current = crate::task::sched::CURRENT_TASK_ID.load(core::sync::atomic::Ordering::Relaxed);
     let mut tasks = crate::task::process::TASKS.lock();
-    let pgt = &mut tasks[current].as_mut().unwrap().page_table;
+    let task = tasks[current].as_mut().unwrap();
+    let pgt = &mut task.page_table;
     if code.contains(PageFaultErrorCode::PROTECTION_VIOLATION | PageFaultErrorCode::CAUSED_BY_WRITE)
     {
         let phys_addr = pgt.translate_page(page).unwrap().start_address().as_u64();
@@ -224,7 +225,7 @@ pub fn do_user_page_fault(ip: x86_64::VirtAddr, code: PageFaultErrorCode) {
                 .flush();
             }
         }
-    } else if within_stack_range(addr) {
+    } else if within_stack_range(addr) || addr.as_u64() < task.brk {
         let new_page_pa = alloc_physical_page().unwrap();
         page_incref(new_page_pa);
         unsafe {

@@ -2,6 +2,7 @@ use crate::println;
 use crate::task::process::original_kernel_cr3;
 use crate::task::process::ProcessContext as SyscallStackFrame;
 use core::arch::naked_asm;
+use core::sync::atomic::Ordering;
 use x86_64::structures::idt::InterruptStackFrame;
 
 #[naked]
@@ -46,7 +47,7 @@ pub extern "x86-interrupt" fn syscall_handler(_: InterruptStackFrame) {
     }
 }
 
-const NUM_SYSCALLS: usize = 7;
+const NUM_SYSCALLS: usize = 8;
 
 const SYSCALL_TABLE: [fn(*mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_test,
@@ -56,6 +57,7 @@ const SYSCALL_TABLE: [fn(*mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_exit,
     sys_read,
     sys_setfsbase,
+    sys_brk,
 ];
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -128,9 +130,23 @@ pub fn sys_read(args: *mut SyscallStackFrame) {
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn sys_setfsbase(args: *mut SyscallStackFrame) {
     unsafe {
-        println!("sys_setfsbase called with rdi = 0x{:x}", (*args).rdi);
+        // println!("sys_setfsbase called with rdi = 0x{:x}", (*args).rdi);
         use x86_64::VirtAddr;
         x86_64::registers::model_specific::FsBase::write(VirtAddr::new((*args).rdi));
         // loop{}
+    }
+}
+
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub fn sys_brk(args: *mut SyscallStackFrame) {
+    let current = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
+    let mut tasks = crate::task::process::TASKS.lock();
+    let task = tasks[current].as_mut().unwrap();
+    unsafe {
+        (*args).rsi = task.brk;
+        let tmp = (*args).rdi;
+        if tmp != 0 {
+            task.brk = tmp;
+        }
     }
 }

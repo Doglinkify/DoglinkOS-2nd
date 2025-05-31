@@ -38,13 +38,11 @@ fn shell_main_loop() {
         } else if cmd == "exit" {
             break;
         } else if cmd == "sysinfo" {
-            println!("DoglinkOS-2nd version 1.0");
-            println!("DoglinkOS Shell version 1.0");
+            println!("DoglinkOS-2nd version 1.1");
+            println!("DoglinkOS Shell version 1.1");
             println!("In user mode");
         } else if cmd.starts_with("echo") {
             println!("{}", &cmd[5..]);
-        } else if cmd == "mlibc-test" {
-            sys_exec("/mlibc-test");
         } else {
             eprintln!("unknown command");
         }
@@ -53,7 +51,7 @@ fn shell_main_loop() {
 
 #[unsafe(no_mangle)]
 extern "C" fn _start() -> ! {
-    sys_write(0, "\n\nDoglinkOS Shell v1.0\n");
+    sys_write(0, "\n\nDoglinkOS Shell v1.1\n");
     shell_main_loop();
     if sys_fork() == 0 {
         // child

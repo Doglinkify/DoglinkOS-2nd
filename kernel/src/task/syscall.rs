@@ -5,46 +5,44 @@ use core::arch::naked_asm;
 use core::sync::atomic::Ordering;
 use x86_64::structures::idt::InterruptStackFrame;
 
-#[naked]
+#[unsafe(naked)]
 pub extern "x86-interrupt" fn syscall_handler(_: InterruptStackFrame) {
-    unsafe {
-        naked_asm!(
-            "push r15",
-            "push r14",
-            "push r13",
-            "push r12",
-            "push r11",
-            "push r10",
-            "push r9",
-            "push r8",
-            "push rdi",
-            "push rbp",
-            "push rsi",
-            "push rdx",
-            "push rcx",
-            "push rbx",
-            "push rax",
-            "mov rdi, rsp",
-            "call {}",
-            "pop rax",
-            "pop rbx",
-            "pop rcx",
-            "pop rdx",
-            "pop rsi",
-            "pop rbp",
-            "pop rdi",
-            "pop r8",
-            "pop r9",
-            "pop r10",
-            "pop r11",
-            "pop r12",
-            "pop r13",
-            "pop r14",
-            "pop r15",
-            "iretq",
-            sym do_syscall,
-        )
-    }
+    naked_asm!(
+        "push r15",
+        "push r14",
+        "push r13",
+        "push r12",
+        "push r11",
+        "push r10",
+        "push r9",
+        "push r8",
+        "push rdi",
+        "push rbp",
+        "push rsi",
+        "push rdx",
+        "push rcx",
+        "push rbx",
+        "push rax",
+        "mov rdi, rsp",
+        "call {}",
+        "pop rax",
+        "pop rbx",
+        "pop rcx",
+        "pop rdx",
+        "pop rsi",
+        "pop rbp",
+        "pop rdi",
+        "pop r8",
+        "pop r9",
+        "pop r10",
+        "pop r11",
+        "pop r12",
+        "pop r13",
+        "pop r14",
+        "pop r15",
+        "iretq",
+        sym do_syscall,
+    )
 }
 
 const NUM_SYSCALLS: usize = 8;

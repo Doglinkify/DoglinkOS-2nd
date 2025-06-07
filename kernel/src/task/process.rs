@@ -318,7 +318,7 @@ pub fn do_exec(args: *mut ProcessContext) {
     // crate::println!("[DEBUG] will set rip to 0x{:x}", new_elf.entry);
     unsafe {
         (*args).rip = new_elf.entry;
-        (*args).rsp = 0x80000000 - 80;
+        (*args).rsp = 0x80000000 - 64;
     }
 }
 

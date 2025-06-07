@@ -18,10 +18,8 @@ jobs:
           toolchain: nightly-2025-04-13
           target: x86_64-unknown-none
           rustflags: ""
-      - name: Add dlos toolchain
-        run: wget https://312314.xyz/pub/dlos.tar.xz && tar xJf dlos.tar.xz -C ~/.rustup/toolchains
       - name: Build
-        run: cargo +dlos --version && cargo +dlos run --release
+        run: cargo run --release
       - uses: actions/upload-artifact@v4
         with:
           name: DoglinkOS.img

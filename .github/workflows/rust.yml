@@ -21,7 +21,7 @@ jobs:
       - name: Add dlos toolchain
         run: wget https://312314.xyz/pub/dlos.tar.xz && tar xJf dlos.tar.xz -C ~/.rustup/toolchains
       - name: Build
-        run: cargo +dlos run --release -Z bindeps
+        run: cargo +dlos --version && cargo +dlos run --release
       - uses: actions/upload-artifact@v4
         with:
           name: DoglinkOS.img

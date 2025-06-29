@@ -45,6 +45,10 @@ fn shell_main_loop() {
             println!("{}", &cmd[5..]);
         } else if cmd == "hello-std" {
             sys_exec("/hello_std");
+        } else if cmd == "dins empty" {
+            sys_exec("/dins_empty");
+        } else if cmd == "dins hello" {
+            sys_exec("/dins_hello");
         } else {
             eprintln!("unknown command");
         }

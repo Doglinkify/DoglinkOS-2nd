@@ -4,6 +4,7 @@
 #![allow(non_snake_case)]
 #![allow(dead_code)]
 #![allow(non_upper_case_globals)]
+#![allow(static_mut_refs)]
 
 extern crate alloc;
 pub mod acpi;

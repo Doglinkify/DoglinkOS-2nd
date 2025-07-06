@@ -1,6 +1,11 @@
+mod fat;
+
 use crate::blockdev::ramdisk::RamDisk;
 use crate::println;
-use fatfs::{FileSystem, FsOptions};
+use alloc::borrow::ToOwned;
+use alloc::boxed::Box;
+use alloc::string::String;
+use alloc::vec::Vec;
 use limine::modules::InternalModule;
 use limine::request::ModuleRequest;
 
@@ -9,7 +14,33 @@ use limine::request::ModuleRequest;
 static MODULE_REQUEST: ModuleRequest =
     ModuleRequest::new().with_internal_modules(&[&InternalModule::new().with_path(c"/initrd.img")]);
 
-static mut ROOTFS: Option<FileSystem<RamDisk>> = None;
+static mut MOUNT_TABLE: Option<Vec<(String, Box<dyn VfsDirectory>)>> = None;
+
+pub trait VfsDirectory: Send {
+    fn file(&self, path: &str) -> Result<Box<dyn VfsFile + '_>, ()>;
+}
+
+pub trait VfsFile {
+    fn size(&mut self) -> usize;
+    fn read(&mut self, buf: &mut [u8]) -> usize;
+    fn write(&mut self, buf: &mut [u8]) -> usize;
+    fn seek(&mut self, pos: SeekFrom) -> usize;
+    fn read_exact(&mut self, buf: &mut [u8]) {
+        let mut buf2 = buf;
+        while !buf2.is_empty() {
+            match self.read(buf2) {
+                0 => break,
+                n => buf2 = &mut buf2[n..],
+            }
+        }
+    }
+}
+
+pub enum SeekFrom {
+    Start(usize),
+    End(isize),
+    Current(isize),
+}
 
 pub fn init() {
     let file = MODULE_REQUEST.get_response().unwrap().modules()[0];
@@ -18,15 +49,34 @@ pub fn init() {
         file.addr(),
         file.size()
     );
-    let disk = RamDisk::with_addr_and_size(file.addr(), file.size());
     unsafe {
-        ROOTFS = Some(FileSystem::new(disk, FsOptions::new()).unwrap());
+        MOUNT_TABLE = Some(Vec::new());
+    }
+    let disk = RamDisk::with_addr_and_size(file.addr(), file.size());
+    mount(disk, "/", self::fat::get_fs);
+}
+
+pub fn mount<T>(device: T, path: &str, fs: fn(T) -> Box<dyn VfsDirectory>)
+where
+    T: fatfs::ReadWriteSeek,
+{
+    unsafe {
+        MOUNT_TABLE
+            .as_mut()
+            .unwrap()
+            .push((path.to_owned(), fs(device)));
     }
 }
 
-#[allow(static_mut_refs)]
-pub fn get_file(
-    path: &str,
-) -> fatfs::File<RamDisk, fatfs::DefaultTimeProvider, fatfs::LossyOemCpConverter> {
-    unsafe { ROOTFS.as_ref().unwrap().root_dir().open_file(path).unwrap() }
+pub fn get_file(path: &str) -> Result<Box<dyn VfsFile>, ()> {
+    unsafe {
+        for fs in MOUNT_TABLE.as_mut().unwrap().iter() {
+            if path.starts_with(&fs.0) {
+                if let Ok(res) = fs.1.file(&path[(fs.0.len() - 1)..]) {
+                    return Ok(res);
+                }
+            }
+        }
+    }
+    Err(())
 }

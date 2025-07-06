@@ -2,7 +2,6 @@ use crate::mm::page_alloc::alloc_physical_page;
 use crate::mm::phys_to_virt;
 use core::cmp::max;
 use core::sync::atomic::Ordering;
-use fatfs::Read;
 use spin::Lazy;
 use spin::Mutex;
 use x86_64::addr::PhysAddr;
@@ -259,11 +258,8 @@ pub fn do_exec(args: *mut ProcessContext) {
         let slice = core::slice::from_raw_parts((*args).rdi as *const _, (*args).rcx as usize);
         core::str::from_utf8(slice).unwrap()
     };
-    let mut elf_file = crate::vfs::get_file(path);
-    let mut size = 0;
-    for e in elf_file.extents() {
-        size += e.unwrap().size;
-    }
+    let mut elf_file = crate::vfs::get_file(path).unwrap();
+    let size = elf_file.size();
     let c_tid = super::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
     let mut tasks = TASKS.lock();
     let current_task = tasks[c_tid].as_mut().unwrap();
@@ -273,7 +269,7 @@ pub fn do_exec(args: *mut ProcessContext) {
     current_task.fs = VirtAddr::zero();
     current_task.brk = 0;
     let mut buf = alloc::vec![0u8; size as usize];
-    elf_file.read_exact(buf.as_mut_slice()).unwrap();
+    elf_file.read_exact(buf.as_mut_slice());
     let new_elf = goblin::elf::Elf::parse(buf.as_slice());
     let new_elf = new_elf.unwrap(); // strange, but necessary
     for ph in new_elf.program_headers {

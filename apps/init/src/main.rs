@@ -38,26 +38,30 @@ fn shell_main_loop() {
         } else if cmd == "exit" {
             break;
         } else if cmd == "sysinfo" {
-            println!("DoglinkOS-2nd version 1.3 Snapshot 0629");
-            println!("DoglinkOS Shell version 1.3 Snapshot 0629");
+            println!("DoglinkOS-2nd version 1.3 Snapshot 0708");
+            println!("DoglinkOS Shell version 1.3 Snapshot 0708");
             println!("In user mode");
         } else if cmd.starts_with("echo") {
             println!("{}", &cmd[5..]);
-        } else if cmd == "hello-std" {
-            sys_exec("/hello_std");
-        } else if cmd == "dins empty" {
-            sys_exec("/dins_empty");
-        } else if cmd == "dins hello" {
-            sys_exec("/dins_hello");
         } else {
-            eprintln!("unknown command");
+            let mut buf2 = [0u8; 128];
+            buf2[0..5].copy_from_slice(b"/bin/");
+            buf2[5..(5 + len)].copy_from_slice(&buf[..len]);
+            let fork_result = sys_fork();
+            if fork_result == 0 {
+                sys_exec(unsafe { core::str::from_utf8_unchecked(&buf2[..(len + 5)]) });
+                eprintln!("unknown command");
+                sys_exit();
+            } else {
+                sys_waitpid(fork_result);
+            }
         }
     }
 }
 
 #[unsafe(no_mangle)]
 extern "C" fn _start() -> ! {
-    sys_write(0, "\n\nDoglinkOS Shell v1.3 Snapshot 0629\n");
+    sys_write(0, "\n\nDoglinkOS Shell v1.3 Snapshot 0708\n");
     shell_main_loop();
     if sys_fork() == 0 {
         // child
@@ -67,5 +71,6 @@ extern "C" fn _start() -> ! {
         TEST.t.set(4);
     }
     println!("Now TEST is {}!", TEST.t.get());
-    sys_exec("/exiter");
+    sys_exec("/bin/exiter");
+    sys_exit();
 }

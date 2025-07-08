@@ -15,8 +15,8 @@ fn main() {
         std::arch::asm!(
             "int 0x80",
             in("rax") 3,
-            in("rdi") "/doglinked".as_ptr(),
-            in("rcx") "/doglinked".len(),
+            in("rdi") "/sbin/doglinked".as_ptr(),
+            in("rcx") "/sbin/doglinked".len(),
         );
     }
 }

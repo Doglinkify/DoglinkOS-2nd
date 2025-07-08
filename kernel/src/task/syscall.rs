@@ -45,7 +45,7 @@ pub extern "x86-interrupt" fn syscall_handler(_: InterruptStackFrame) {
     )
 }
 
-const NUM_SYSCALLS: usize = 8;
+const NUM_SYSCALLS: usize = 9;
 
 const SYSCALL_TABLE: [fn(*mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_test,
@@ -56,6 +56,7 @@ const SYSCALL_TABLE: [fn(*mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_read,
     sys_setfsbase,
     sys_brk,
+    sys_waitpid,
 ];
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -74,7 +75,7 @@ pub extern "C" fn do_syscall(args: *mut SyscallStackFrame) {
         SYSCALL_TABLE[call_num](args);
         // sys_exit will call schedule() to load another page table, so we don't need to load it here
     } else {
-        panic!("syscall {} not present", call_num);
+        println!("[WARN] task/syscall: syscall {} not present", call_num);
     }
 }
 
@@ -147,4 +148,15 @@ pub fn sys_brk(args: *mut SyscallStackFrame) {
             task.brk = tmp;
         }
     }
+}
+
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub fn sys_waitpid(args: *mut SyscallStackFrame) {
+    {
+        let current = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
+        let mut tasks = crate::task::process::TASKS.lock();
+        let task = tasks[current].as_mut().unwrap();
+        task.waiting_pid = Some(unsafe { (*args).rdi as usize });
+    }
+    crate::task::sched::schedule(args, false);
 }

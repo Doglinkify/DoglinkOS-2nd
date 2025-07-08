@@ -69,8 +69,8 @@ extern "C" fn kmain() -> ! {
             asm!(
                 "int 0x80",
                 in("rax") 3, // sys_exec
-                in("rdi") "/doglinked".as_ptr(),
-                in("rcx") "/doglinked".len(),
+                in("rdi") "/sbin/doglinked".as_ptr(),
+                in("rcx") "/sbin/doglinked".len(),
             );
             unreachable!();
         } else {

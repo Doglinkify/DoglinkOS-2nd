@@ -33,7 +33,7 @@ pub fn sys_fork() -> usize {
     fork_result
 }
 
-pub fn sys_exec(path: &str) -> ! {
+pub fn sys_exec(path: &str) {
     unsafe {
         core::arch::asm!(
             "int 0x80",
@@ -42,7 +42,6 @@ pub fn sys_exec(path: &str) -> ! {
             in("rcx") path.len(),
         );
     }
-    unreachable!();
 }
 
 pub fn sys_exit() -> ! {
@@ -73,6 +72,16 @@ pub fn sys_read() -> u8 {
         ch = raw_sys_read();
     }
     ch
+}
+
+pub fn sys_waitpid(pid: usize) {
+    unsafe {
+        core::arch::asm!(
+            "int 0x80",
+            in("rax") 8,
+            in("rdi") pid,
+        );
+    }
 }
 
 #[macro_export]

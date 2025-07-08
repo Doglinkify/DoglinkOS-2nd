@@ -56,10 +56,19 @@ pub extern "C" fn schedule(
     {
         let mut tasks = super::process::TASKS.lock();
         for tid in 0..64 {
-            if let Some(ref process) = tasks[tid] {
-                if tid != CURRENT_TASK_ID.load(Ordering::Relaxed) && process.tm > max_tm {
+            if tasks[tid].is_some() {
+                let process = tasks[tid].as_ref().unwrap();
+                let wait_ok = match process.waiting_pid {
+                    Some(pid) => tasks[pid].is_none(),
+                    None => true,
+                };
+                if tid != CURRENT_TASK_ID.load(Ordering::Relaxed) && process.tm > max_tm && wait_ok
+                {
                     max_tm = process.tm;
                     max_tid = tid;
+                }
+                if wait_ok {
+                    tasks[tid].as_mut().unwrap().waiting_pid = None;
                 }
             }
         }

@@ -1,0 +1,26 @@
+name: Rust
+
+on:
+  push:
+    branches: ["main"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: nightly-2025-06-01
+          target: x86_64-unknown-none
+          rustflags: ""
+      - name: Build
+        run: cargo run --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DoglinkOS.img
+          path: DoglinkOS-2nd.img

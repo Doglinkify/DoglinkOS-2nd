@@ -38,9 +38,10 @@ fn shell_main_loop() {
         } else if cmd == "exit" {
             break;
         } else if cmd == "sysinfo" {
-            println!("DoglinkOS-2nd version 1.3 Snapshot 0708");
-            println!("DoglinkOS Shell version 1.3 Snapshot 0708");
+            println!("DoglinkOS-2nd version 1.3 Snapshot 0713");
+            println!("DoglinkOS Shell version 1.3 Snapshot 0713");
             println!("In user mode");
+            println!("Current shell PID: {}", sys_getpid());
         } else if cmd.starts_with("echo") {
             println!("{}", &cmd[5..]);
         } else {
@@ -61,7 +62,7 @@ fn shell_main_loop() {
 
 #[unsafe(no_mangle)]
 extern "C" fn _start() -> ! {
-    sys_write(0, "\n\nDoglinkOS Shell v1.3 Snapshot 0708\n");
+    sys_write(0, "\n\nDoglinkOS Shell v1.3 Snapshot 0713s\n");
     shell_main_loop();
     if sys_fork() == 0 {
         // child

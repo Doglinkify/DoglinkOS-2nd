@@ -42,6 +42,7 @@ fn shell_main_loop() {
             println!("DoglinkOS Shell version 1.3 Snapshot 0713");
             println!("In user mode");
             println!("Current shell PID: {}", sys_getpid());
+            println!("Current kernel ticks: {}", sys_getticks());
         } else if cmd.starts_with("echo") {
             println!("{}", &cmd[5..]);
         } else {

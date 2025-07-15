@@ -45,7 +45,7 @@ pub extern "x86-interrupt" fn syscall_handler(_: InterruptStackFrame) {
     )
 }
 
-const NUM_SYSCALLS: usize = 10;
+const NUM_SYSCALLS: usize = 11;
 
 const SYSCALL_TABLE: [fn(*mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_test,
@@ -58,6 +58,7 @@ const SYSCALL_TABLE: [fn(*mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_brk,
     sys_waitpid,
     sys_getpid,
+    sys_getticks,
 ];
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -166,5 +167,12 @@ pub fn sys_waitpid(args: *mut SyscallStackFrame) {
 pub fn sys_getpid(args: *mut SyscallStackFrame) {
     unsafe {
         (*args).rcx = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed) as u64;
+    }
+}
+
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+pub fn sys_getticks(args: *mut SyscallStackFrame) {
+    unsafe {
+        (*args).rcx = crate::task::sched::TOTAL_TICKS.load(Ordering::Relaxed) as u64;
     }
 }

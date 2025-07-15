@@ -4,6 +4,7 @@ use x86_64::structures::paging::PhysFrame;
 use x86_64::PhysAddr;
 
 pub static CURRENT_TASK_ID: AtomicUsize = AtomicUsize::new(0);
+pub static TOTAL_TICKS: AtomicUsize = AtomicUsize::new(0);
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn switch_to(
@@ -45,12 +46,21 @@ pub fn switch_to(
     }
 }
 
+pub extern "C" fn timer(
+    context: *mut super::process::ProcessContext,
+) {
+    x86_64::instructions::interrupts::disable();
+    schedule(context, false);
+    TOTAL_TICKS.fetch_add(1, Ordering::Relaxed);
+    x86_64::instructions::interrupts::enable();
+    crate::apic::local::eoi();
+}
+
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn schedule(
+pub fn schedule(
     context: *mut super::process::ProcessContext,
     current_process_exited: bool,
 ) {
-    x86_64::instructions::interrupts::disable();
     let mut max_tm = 0;
     let mut max_tid = 127;
     {
@@ -83,6 +93,4 @@ pub extern "C" fn schedule(
         tasks[max_tid].as_mut().unwrap().tm -= 1;
     }
     switch_to(context, max_tid, current_process_exited);
-    x86_64::instructions::interrupts::enable();
-    crate::apic::local::eoi();
 }

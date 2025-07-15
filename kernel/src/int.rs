@@ -46,7 +46,6 @@ pub extern "x86-interrupt" fn handler1(_: InterruptStackFrame) {
         "push rbx",
         "push rax",
         "mov rdi, rsp",
-        "mov rsi, 0",
         "call {}",
         "pop rax",
         "pop rbx",
@@ -64,7 +63,7 @@ pub extern "x86-interrupt" fn handler1(_: InterruptStackFrame) {
         "pop r14",
         "pop r15",
         "iretq",
-        sym crate::task::sched::schedule,
+        sym crate::task::sched::timer,
     )
 }
 

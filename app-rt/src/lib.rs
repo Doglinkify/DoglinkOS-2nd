@@ -108,6 +108,19 @@ pub fn sys_getticks() -> usize {
     }
 }
 
+pub fn sys_info(tp: u64) -> usize {
+    unsafe {
+        let res;
+        core::arch::asm!(
+            "int 0x80",
+            in("rax") 11,
+            in("rdi") tp,
+            out("rcx") res,
+        );
+        res
+    }
+}
+
 #[macro_export]
 macro_rules! print {
     ($($arg:tt)*) => ($crate::_print(format_args!($($arg)*)));

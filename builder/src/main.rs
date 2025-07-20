@@ -93,6 +93,7 @@ fn build_img() -> PathBuf {
         ("/bin/hello-std", assets_dir.join("hello_std.elf")),
         ("/bin/dins-empty", assets_dir.join("empty.elf")),
         ("/bin/dins-hello", assets_dir.join("hello.elf")),
+        ("/bin/pl_editor", assets_dir.join("pl_editor.elf")),
     ]);
     let initrd_path = manifest_dir.parent().unwrap().join("initrd.img");
     FatBuilder::create(initrd_files, &initrd_path).expect("failed to build initrd.img");

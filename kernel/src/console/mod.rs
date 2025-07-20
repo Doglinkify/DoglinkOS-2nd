@@ -2,6 +2,7 @@ mod framebuffer;
 
 use alloc::boxed::Box;
 use core::fmt::Write;
+use core::sync::atomic::AtomicBool;
 use crossbeam_queue::ArrayQueue;
 use framebuffer::{FrameBuffer, FRAMEBUFFER_REQUEST};
 use os_terminal::{font::BitmapFont, Terminal};
@@ -25,6 +26,8 @@ pub static TERMINAL: Lazy<Mutex<Terminal<FrameBuffer>>> = Lazy::new(|| {
 pub static ECHO_BUFFER: Lazy<ArrayQueue<u8>> = Lazy::new(|| ArrayQueue::new(128));
 
 pub static INPUT_BUFFER: Lazy<ArrayQueue<u8>> = Lazy::new(|| ArrayQueue::new(128));
+
+pub static ECHO_FLAG: AtomicBool = AtomicBool::new(true);
 
 pub fn init() {
     Lazy::force(&TERMINAL);

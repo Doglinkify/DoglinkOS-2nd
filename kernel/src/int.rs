@@ -80,8 +80,11 @@ pub extern "x86-interrupt" fn handler4(_: InterruptStackFrame) {
         let scancode: u8 = x86_64::instructions::port::PortReadOnly::new(0x60).read();
         let mut term = crate::console::TERMINAL.lock();
         term.handle_keyboard(scancode);
+        let echo = crate::console::ECHO_FLAG.load(core::sync::atomic::Ordering::Relaxed);
         while let Some(b) = crate::console::ECHO_BUFFER.pop() {
-            term.process(&[b]);
+            if echo {
+                term.process(&[b]);
+            }
             crate::console::INPUT_BUFFER.force_push(b);
         }
     }

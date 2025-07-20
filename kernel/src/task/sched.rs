@@ -8,7 +8,7 @@ pub static TOTAL_TICKS: AtomicUsize = AtomicUsize::new(0);
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn switch_to(
-    context: *mut super::process::ProcessContext,
+    context: &mut super::process::ProcessContext,
     next: usize,
     current_process_exited: bool,
 ) {
@@ -30,37 +30,32 @@ pub fn switch_to(
         let mut tasks = super::process::TASKS.lock();
         if !current_process_exited {
             let cur = tasks[current].as_mut().unwrap();
-            cur.context = unsafe { *context };
+            cur.context = *context;
             cur.fs = x86_64::registers::model_specific::FsBase::read();
             unsafe {
                 core::arch::x86_64::_fxsave64((&mut cur.fpu_state) as *mut _ as *mut u8);
             }
         }
+        let nxt = tasks[next].as_ref().unwrap();
+        *context = nxt.context;
+        x86_64::registers::model_specific::FsBase::write(nxt.fs);
         unsafe {
-            let nxt = tasks[next].as_ref().unwrap();
-            *context = nxt.context;
-            x86_64::registers::model_specific::FsBase::write(nxt.fs);
             core::arch::x86_64::_fxrstor64((&nxt.fpu_state) as *const _ as *const u8);
         }
         CURRENT_TASK_ID.store(next, Ordering::Relaxed);
     }
 }
 
-pub extern "C" fn timer(
-    context: *mut super::process::ProcessContext,
-) {
+pub extern "C" fn timer(context: *mut super::process::ProcessContext) {
     x86_64::instructions::interrupts::disable();
-    schedule(context, false);
+    schedule(unsafe { &mut *context }, false);
     TOTAL_TICKS.fetch_add(1, Ordering::Relaxed);
     x86_64::instructions::interrupts::enable();
     crate::apic::local::eoi();
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub fn schedule(
-    context: *mut super::process::ProcessContext,
-    current_process_exited: bool,
-) {
+pub fn schedule(context: &mut super::process::ProcessContext, current_process_exited: bool) {
     let mut max_tm = 0;
     let mut max_tid = 127;
     {

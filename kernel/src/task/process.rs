@@ -167,16 +167,14 @@ impl Process<'_> {
     }
 
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
-    pub fn copy_process(&mut self, context: *mut ProcessContext, new_tid: usize) -> Self {
+    pub fn copy_process(&mut self, context: &mut ProcessContext, new_tid: usize) -> Self {
         let p4t_pa = alloc_physical_page().unwrap();
         let p4t_va = phys_to_virt(p4t_pa);
         let p4t = unsafe { &mut *(p4t_va as *mut PageTable) };
         Self::r_copy(self.page_table.level_4_table_mut(), p4t, 4, true, false);
-        let mut new_context = unsafe { *context };
+        let mut new_context = *context;
         new_context.rcx = 0;
-        unsafe {
-            (*context).rcx = new_tid as u64;
-        }
+        (*context).rcx = new_tid as u64;
         Self {
             page_table: unsafe {
                 OffsetPageTable::new(p4t, x86_64::addr::VirtAddr::new_truncate(phys_to_virt(0)))
@@ -242,7 +240,7 @@ impl Process<'_> {
 pub static TASKS: Mutex<[Option<Process>; 64]> = Mutex::new([const { None }; 64]);
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub fn do_fork(context: *mut ProcessContext) {
+pub fn do_fork(context: &mut ProcessContext) {
     static mut next_tid: usize = 0;
     unsafe {
         next_tid += 1;
@@ -256,7 +254,7 @@ pub fn do_fork(context: *mut ProcessContext) {
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub fn do_exec(args: *mut ProcessContext) {
+pub fn do_exec(args: &mut ProcessContext) {
     let path = unsafe {
         let slice = core::slice::from_raw_parts((*args).rdi as *const _, (*args).rcx as usize);
         core::str::from_utf8(slice).unwrap()
@@ -319,17 +317,15 @@ pub fn do_exec(args: *mut ProcessContext) {
                 }
             }
             // crate::println!("[DEBUG] will set rip to 0x{:x}", new_elf.entry);
-            unsafe {
-                (*args).rip = new_elf.entry;
-                (*args).rsp = 0x80000000 - 64;
-            }
+            (*args).rip = new_elf.entry;
+            (*args).rsp = 0x80000000 - 64;
         }
     }
     // returning from exec means something is wrong
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub fn do_exit(args: *mut ProcessContext) {
+pub fn do_exit(args: &mut ProcessContext) {
     let c_tid = super::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
     // crate::println!("[DEBUG] task: process {c_tid} exited");
     {

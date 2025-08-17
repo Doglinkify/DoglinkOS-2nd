@@ -94,6 +94,7 @@ fn build_img() -> PathBuf {
         ("/bin/dins-empty", assets_dir.join("empty.elf")),
         ("/bin/dins-hello", assets_dir.join("hello.elf")),
         ("/bin/pl_editor", assets_dir.join("pl_editor.elf")),
+        ("/bin/lua", assets_dir.join("lua.elf")),
     ]);
     let initrd_path = manifest_dir.parent().unwrap().join("initrd.img");
     FatBuilder::create(initrd_files, &initrd_path).expect("failed to build initrd.img");

@@ -28,6 +28,10 @@ struct Args {
     #[argh(switch, short = 'v')]
     #[argh(description = "use vnc")]
     vnc: bool,
+
+    #[argh(switch, short = 'g')]
+    #[argh(description = "debug mode")]
+    debug: bool,
 }
 
 fn main() {
@@ -73,6 +77,9 @@ fn main() {
         }
         if args.vnc {
             cmd.arg("-vnc").arg(":1");
+        }
+        if args.debug {
+            cmd.arg("-s").arg("-S");
         }
 
         let mut child = cmd.spawn().unwrap();

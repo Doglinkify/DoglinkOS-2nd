@@ -46,6 +46,8 @@ fn shell_main_loop() {
             println!("Current kernel ticks: {}", sys_info(3));
         } else if cmd.starts_with("echo") {
             println!("{}", &cmd[5..]);
+        } else if cmd == "clear" {
+            print!("\x1b[H\x1b[2J\x1b[3J");
         } else {
             let mut buf2 = [0u8; 128];
             buf2[0..5].copy_from_slice(b"/bin/");

@@ -1,6 +1,6 @@
 [package]
 name = "DoglinkOS-2nd"
-version = "1.3.0-s0818"
+version = "1.3.0-s0819"
 edition = "2021"
 
 [dependencies]

@@ -72,3 +72,29 @@ impl Seek for RamDisk {
         }
     }
 }
+
+impl crate::vfs::VfsFile for RamDisk {
+    fn size(&mut self) -> usize {
+        self.size_in_blocks * 512
+    }
+
+    fn read(&mut self, buf: &mut [u8]) -> usize {
+        <Self as fatfs::Read>::read(self, buf).unwrap()
+    }
+
+    fn write(&mut self, buf: &[u8]) -> usize {
+        <Self as fatfs::Write>::write(self, buf).unwrap()
+    }
+
+    fn seek(&mut self, pos: crate::vfs::SeekFrom) -> usize {
+        <Self as fatfs::Seek>::seek(
+            self,
+            match pos {
+                crate::vfs::SeekFrom::End(x) => fatfs::SeekFrom::End(x as i64),
+                crate::vfs::SeekFrom::Current(x) => fatfs::SeekFrom::Current(x as i64),
+                crate::vfs::SeekFrom::Start(x) => fatfs::SeekFrom::Start(x as u64),
+            },
+        )
+        .unwrap() as usize
+    }
+}

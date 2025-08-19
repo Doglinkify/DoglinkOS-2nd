@@ -1,5 +1,6 @@
 use crate::mm::page_alloc::alloc_physical_page;
 use crate::mm::phys_to_virt;
+use alloc::sync::Arc;
 use core::cmp::max;
 use core::sync::atomic::Ordering;
 use spin::Lazy;
@@ -50,6 +51,7 @@ pub struct Process<'a> {
     pub fs: VirtAddr,
     pub brk: u64,
     pub waiting_pid: Option<usize>,
+    pub files: [Option<Arc<Mutex<dyn crate::vfs::VfsFile>>>; 64],
 }
 
 pub static original_kernel_cr3: Lazy<(PhysFrame, Cr3Flags)> = Lazy::new(Cr3::read);
@@ -91,6 +93,9 @@ const FPU_INIT: [u128; 32] = [
 
 impl Process<'_> {
     pub fn task_0() -> Self {
+        let mut files = [const { None }; 64];
+        files[0] = crate::vfs::get_file("/dev/stderr").ok();
+        files[1] = crate::vfs::get_file("/dev/stdout").ok();
         Process {
             page_table: Self::t0_p4_table(),
             context: ProcessContext::default(),
@@ -99,6 +104,7 @@ impl Process<'_> {
             fs: VirtAddr::new(0),
             brk: 0,
             waiting_pid: None,
+            files,
         }
     }
 
@@ -185,6 +191,7 @@ impl Process<'_> {
             fs: VirtAddr::new(0),
             brk: self.brk,
             waiting_pid: None,
+            files: self.files.clone(),
         }
     }
 
@@ -259,7 +266,8 @@ pub fn do_exec(args: &mut ProcessContext) {
         let slice = core::slice::from_raw_parts((*args).rdi as *const _, (*args).rcx as usize);
         core::str::from_utf8(slice).unwrap()
     };
-    if let Ok(mut elf_file) = crate::vfs::get_file(path) {
+    if let Ok(elf_file_lock) = crate::vfs::get_file(path) {
+        let mut elf_file = elf_file_lock.lock();
         let size = elf_file.size();
         let c_tid = super::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
         let mut tasks = TASKS.lock();

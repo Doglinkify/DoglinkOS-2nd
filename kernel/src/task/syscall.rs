@@ -1,6 +1,7 @@
 use crate::println;
 use crate::task::process::original_kernel_cr3;
 use crate::task::process::ProcessContext as SyscallStackFrame;
+use crate::vfs::SeekFrom;
 use core::arch::naked_asm;
 use core::sync::atomic::Ordering;
 use x86_64::structures::idt::InterruptStackFrame;
@@ -45,7 +46,7 @@ pub extern "x86-interrupt" fn syscall_handler(_: InterruptStackFrame) {
     )
 }
 
-const NUM_SYSCALLS: usize = 12;
+const NUM_SYSCALLS: usize = 17;
 
 const SYSCALL_TABLE: [fn(&mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_test,
@@ -60,6 +61,11 @@ const SYSCALL_TABLE: [fn(&mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_getpid,
     sys_getticks,
     sys_info,
+    sys_open,
+    sys_read2,
+    sys_seek,
+    sys_close,
+    sys_remove,
 ];
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -90,18 +96,13 @@ pub fn sys_test(_: &mut SyscallStackFrame) {
 pub fn sys_write(args: &mut SyscallStackFrame) {
     let (fd, ptr, size) = ((*args).rdi, (*args).rsi, (*args).rcx);
     // println!("[DEBUG] sys_write: to {fd} ptr 0x{ptr:x} size {size}");
-    if fd > 1 {
-        panic!("invalid fd {}", fd);
-    } else {
-        let mut term = crate::console::TERMINAL.lock();
-        if fd == 0 {
-            term.process(b"\x1b[31m");
-        }
-        term.process(unsafe { core::slice::from_raw_parts(ptr as *const u8, size as usize) });
-        if fd == 0 {
-            term.process(b"\x1b[0m");
-        }
-    }
+    let current = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
+    let mut tasks = crate::task::process::TASKS.lock();
+    let task = tasks[current].as_mut().unwrap();
+    let _ = task.files[fd as usize].as_ref().map(|file| {
+        file.lock()
+            .write_all(unsafe { core::slice::from_raw_parts(ptr as *const u8, size as usize) })
+    });
 }
 
 pub fn sys_fork(args: &mut SyscallStackFrame) {
@@ -173,4 +174,66 @@ pub fn sys_info(args: &mut SyscallStackFrame) {
         }
         _ => 0,
     };
+}
+
+pub fn sys_open(args: &mut SyscallStackFrame) {
+    let path = unsafe { core::str::from_raw_parts(args.rdi as *const u8, args.rcx as usize) };
+    let do_create = args.r10 != 0;
+    let current = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
+    let mut tasks = crate::task::process::TASKS.lock();
+    let task = tasks[current].as_mut().unwrap();
+    let res = task
+        .files
+        .iter()
+        .enumerate()
+        .find(|x| x.1.is_none())
+        .unwrap()
+        .0;
+    task.files[res] = if do_create {
+        crate::vfs::create_file_or_open_existing(path).ok()
+    } else {
+        crate::vfs::get_file(path).ok()
+    };
+    args.rsi = res as u64;
+}
+
+pub fn sys_read2(args: &mut SyscallStackFrame) {
+    let buf = unsafe { core::slice::from_raw_parts_mut(args.rdi as *mut u8, args.rcx as usize) };
+    let current = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
+    let mut tasks = crate::task::process::TASKS.lock();
+    let task = tasks[current].as_mut().unwrap();
+    task.files[args.rsi as usize]
+        .as_ref()
+        .unwrap()
+        .lock()
+        .read_exact(buf);
+}
+
+pub fn sys_seek(args: &mut SyscallStackFrame) {
+    let pos = match args.rdi {
+        0 => SeekFrom::Current(args.rcx.cast_signed() as isize),
+        1 => SeekFrom::End(args.rcx.cast_signed() as isize),
+        2 => SeekFrom::Start(args.rcx as usize),
+        _ => return,
+    };
+    let current = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
+    let mut tasks = crate::task::process::TASKS.lock();
+    let task = tasks[current].as_mut().unwrap();
+    args.r10 = task.files[args.rsi as usize]
+        .as_ref()
+        .unwrap()
+        .lock()
+        .seek(pos) as u64;
+}
+
+pub fn sys_close(args: &mut SyscallStackFrame) {
+    let current = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
+    let mut tasks = crate::task::process::TASKS.lock();
+    let task = tasks[current].as_mut().unwrap();
+    task.files[args.rsi as usize] = None;
+}
+
+pub fn sys_remove(args: &mut SyscallStackFrame) {
+    let path = unsafe { core::str::from_raw_parts(args.rdi as *const u8, args.rcx as usize) };
+    let _ = crate::vfs::remove_file(path);
 }

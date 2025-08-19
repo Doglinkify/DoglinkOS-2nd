@@ -44,10 +44,37 @@ fn shell_main_loop() {
             println!("Console: {} rows, {} cols", sys_info(1), sys_info(0));
             println!("Current shell PID: {}", sys_info(2));
             println!("Current kernel ticks: {}", sys_info(3));
-        } else if cmd.starts_with("echo") {
+        } else if cmd.starts_with("echo ") {
             println!("{}", &cmd[5..]);
         } else if cmd == "clear" {
             print!("\x1b[H\x1b[2J\x1b[3J");
+        } else if cmd == "file-read" {
+            let fd = sys_open("/test.txt", true);
+            let size = sys_seek(fd, 0, SEEK_END);
+            println!("File /test.txt is {size} bytes");
+            sys_seek(fd, 0, SEEK_SET);
+            let mut content = [0; 512];
+            sys_read2(fd, &mut content);
+            println!("{:?}", &content[..size]);
+            sys_close(fd);
+        } else if cmd == "disk-read" {
+            let fd = sys_open("/dev/disk0", false);
+            let mut content = [0; 512];
+            sys_read2(fd, &mut content);
+            println!("{content:?}");
+            sys_close(fd);
+        } else if cmd == "initrd-read" {
+            let fd = sys_open("/dev/initrd", false);
+            let mut content = [0; 512];
+            sys_read2(fd, &mut content);
+            println!("{content:?}");
+            sys_close(fd);
+        } else if cmd.starts_with("file-write ") {
+            let fd = sys_open("/test.txt", true);
+            sys_write(fd, &cmd[11..]);
+            sys_close(fd);
+        } else if cmd.starts_with("file-rm") {
+            sys_remove("/test.txt");
         } else {
             let mut buf2 = [0u8; 128];
             buf2[0..5].copy_from_slice(b"/bin/");

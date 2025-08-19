@@ -121,6 +121,73 @@ pub fn sys_info(tp: u64) -> usize {
     }
 }
 
+pub fn sys_open(name: &str, do_create: bool) -> usize {
+    unsafe {
+        let res;
+        core::arch::asm!(
+            "int 0x80",
+            in("rax") 12,
+            in("rdi") name.as_ptr(),
+            in("rcx") name.len(),
+            in("r10") do_create as usize,
+            out("rsi") res,
+        );
+        res
+    }
+}
+
+pub fn sys_read2(fd: usize, buf: &mut [u8]) {
+    unsafe {
+        core::arch::asm!(
+            "int 0x80",
+            in("rax") 13,
+            in("rsi") fd,
+            in("rdi") buf.as_mut_ptr(),
+            in("rcx") buf.len(),
+        );
+    }
+}
+
+pub const SEEK_CUR: usize = 0;
+pub const SEEK_END: usize = 1;
+pub const SEEK_SET: usize = 2;
+
+pub fn sys_seek(fd: usize, offset: isize, from: usize) -> usize {
+    unsafe {
+        let res;
+        core::arch::asm!(
+            "int 0x80",
+            in("rax") 14,
+            in("rsi") fd,
+            in("rdi") from,
+            in("rcx") offset,
+            out("r10") res,
+        );
+        res
+    }
+}
+
+pub fn sys_close(fd: usize) {
+    unsafe {
+        core::arch::asm!(
+            "int 0x80",
+            in("rax") 15,
+            in("rsi") fd,
+        );
+    }
+}
+
+pub fn sys_remove(name: &str) {
+    unsafe {
+        core::arch::asm!(
+            "int 0x80",
+            in("rax") 16,
+            in("rdi") name.as_ptr(),
+            in("rcx") name.len(),
+        );
+    }
+}
+
 #[macro_export]
 macro_rules! print {
     ($($arg:tt)*) => ($crate::_print(format_args!($($arg)*)));

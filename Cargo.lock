@@ -16,6 +16,7 @@ dependencies = [
  "os-terminal",
  "raw-cpuid 11.5.0",
  "spin 0.9.8",
+ "vcell",
  "x2apic",
  "x86_64 0.15.2",
 ]

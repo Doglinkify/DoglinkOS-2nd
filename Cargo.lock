@@ -13,6 +13,7 @@ dependencies = [
  "goblin",
  "good_memory_allocator",
  "limine",
+ "nvme",
  "os-terminal",
  "raw-cpuid 11.5.0",
  "spin 0.9.8",
@@ -536,6 +537,11 @@ name = "noto-sans-mono-bitmap"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1064d564ae026ae123bf5d607318b42a5b31d70a3c48e6ea7ee44cce4cdb095e"
+
+[[package]]
+name = "nvme"
+version = "0.3.0"
+source = "git+https://github.com/plos-clan/nvme-rs?rev=04c5a8f067def0df813058f2edcb3f3d58c8b33e#04c5a8f067def0df813058f2edcb3f3d58c8b33e"
 
 [[package]]
 name = "once_cell"

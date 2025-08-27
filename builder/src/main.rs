@@ -32,6 +32,10 @@ struct Args {
     #[argh(switch, short = 'g')]
     #[argh(description = "debug mode")]
     debug: bool,
+
+    #[argh(switch, short = 'n')]
+    #[argh(description = "use nvme disk instead of ahci disk")]
+    nvme: bool,
 }
 
 fn main() {
@@ -64,9 +68,13 @@ fn main() {
         //     cmd.arg("-device").arg("hda-output,audiodev=sound");
         // }
 
+        if args.nvme {
+            cmd.arg("-device").arg("nvme,drive=disk1,serial=deadbeef");
+        } else {
+            cmd.arg("-device").arg("ahci,id=ahci");
+            cmd.arg("-device").arg("ide-hd,drive=disk1,bus=ahci.0");
+        }
         let drive_config = format!("if=none,format=raw,id=disk1,file={}", img_path.display());
-        cmd.arg("-device").arg("ahci,id=ahci");
-        cmd.arg("-device").arg("ide-hd,drive=disk1,bus=ahci.0");
         cmd.arg("-drive").arg(drive_config);
 
         if args.kvm {

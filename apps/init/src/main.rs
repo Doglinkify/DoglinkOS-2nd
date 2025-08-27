@@ -73,6 +73,15 @@ fn shell_main_loop() {
             } else {
                 println!("error while opening /dev/disk0");
             }
+        } else if cmd == "nvme-read" {
+            if let Some(fd) = sys_open("/dev/nvme0-0", false) {
+                let mut content = [0; 512];
+                sys_read2(fd, &mut content);
+                println!("{content:?}");
+                sys_close(fd);
+            } else {
+                println!("error while opening /dev/nvme0-0");
+            }
         } else if cmd == "initrd-read" {
             if let Some(fd) = sys_open("/dev/initrd", false) {
                 let mut content = [0; 512];

@@ -7,6 +7,7 @@ use limine::BaseRevision;
 use DoglinkOS_2nd::acpi::parse_madt;
 use DoglinkOS_2nd::apic::{io::init as init_ioapic, local::init as init_lapic};
 use DoglinkOS_2nd::blockdev::ahci::init as init_ahci;
+use DoglinkOS_2nd::blockdev::nvme::init as init_nvme;
 use DoglinkOS_2nd::console::init as init_terminal;
 use DoglinkOS_2nd::cpu::show_cpu_info;
 use DoglinkOS_2nd::int::init as init_interrupt;
@@ -51,6 +52,7 @@ extern "C" fn kmain() -> ! {
     init_ioapic(parse_madt());
     init_pcie();
     init_ahci();
+    init_nvme();
     show_cpu_info();
     show_pcie_info();
     test_page_alloc();

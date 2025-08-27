@@ -41,38 +41,54 @@ fn shell_main_loop() {
             println!("DoglinkOS-2nd version 1.3 Snapshot 0819");
             println!("DoglinkOS Shell version 1.3 Snapshot 0819");
             println!("In user mode");
-            println!("Console: {} rows, {} cols", sys_info(1), sys_info(0));
-            println!("Current shell PID: {}", sys_info(2));
-            println!("Current kernel ticks: {}", sys_info(3));
+            println!(
+                "Console: {} rows, {} cols",
+                sys_info(1).unwrap(),
+                sys_info(0).unwrap()
+            );
+            println!("Current shell PID: {}", sys_info(2).unwrap());
+            println!("Current kernel ticks: {}", sys_info(3).unwrap());
         } else if cmd.starts_with("echo ") {
             println!("{}", &cmd[5..]);
         } else if cmd == "clear" {
             print!("\x1b[H\x1b[2J\x1b[3J");
         } else if cmd == "file-read" {
-            let fd = sys_open("/test.txt", true);
-            let size = sys_seek(fd, 0, SEEK_END);
-            println!("File /test.txt is {size} bytes");
-            sys_seek(fd, 0, SEEK_SET);
-            let mut content = [0; 512];
-            sys_read2(fd, &mut content);
-            println!("{:?}", &content[..size]);
-            sys_close(fd);
+            if let Some(fd) = sys_open("/test.txt", true) {
+                let size = sys_seek(fd, 0, SEEK_END);
+                println!("File /test.txt is {size} bytes");
+                sys_seek(fd, 0, SEEK_SET);
+                let mut content = [0; 512];
+                sys_read2(fd, &mut content);
+                println!("{:?}", &content[..size]);
+                sys_close(fd);
+            } else {
+                println!("error while opening /test.txt");
+            }
         } else if cmd == "disk-read" {
-            let fd = sys_open("/dev/disk0", false);
-            let mut content = [0; 512];
-            sys_read2(fd, &mut content);
-            println!("{content:?}");
-            sys_close(fd);
+            if let Some(fd) = sys_open("/dev/disk0", false) {
+                let mut content = [0; 512];
+                sys_read2(fd, &mut content);
+                println!("{content:?}");
+                sys_close(fd);
+            } else {
+                println!("error while opening /dev/disk0");
+            }
         } else if cmd == "initrd-read" {
-            let fd = sys_open("/dev/initrd", false);
-            let mut content = [0; 512];
-            sys_read2(fd, &mut content);
-            println!("{content:?}");
-            sys_close(fd);
+            if let Some(fd) = sys_open("/dev/initrd", false) {
+                let mut content = [0; 512];
+                sys_read2(fd, &mut content);
+                println!("{content:?}");
+                sys_close(fd);
+            } else {
+                println!("error while opening /dev/initrd");
+            }
         } else if cmd.starts_with("file-write ") {
-            let fd = sys_open("/test.txt", true);
-            sys_write(fd, &cmd[11..]);
-            sys_close(fd);
+            if let Some(fd) = sys_open("/test.txt", true) {
+                sys_write(fd, &cmd[11..]);
+                sys_close(fd);
+            } else {
+                println!("error while opening /test.txt");
+            }
         } else if cmd.starts_with("file-rm") {
             sys_remove("/test.txt");
         } else {

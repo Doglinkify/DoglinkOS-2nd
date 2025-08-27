@@ -172,7 +172,7 @@ pub fn sys_info(args: &mut SyscallStackFrame) {
             crate::console::ECHO_FLAG.store(true, Ordering::Relaxed);
             0
         }
-        _ => 0,
+        _ => u64::MAX,
     };
 }
 
@@ -182,19 +182,21 @@ pub fn sys_open(args: &mut SyscallStackFrame) {
     let current = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
     let mut tasks = crate::task::process::TASKS.lock();
     let task = tasks[current].as_mut().unwrap();
-    let res = task
-        .files
-        .iter()
-        .enumerate()
-        .find(|x| x.1.is_none())
-        .unwrap()
-        .0;
-    task.files[res] = if do_create {
-        crate::vfs::create_file_or_open_existing(path).ok()
+    if let Some((res, _)) = task.files.iter().enumerate().find(|x| x.1.is_none()) {
+        let tmp = if do_create {
+            crate::vfs::create_file_or_open_existing(path).ok()
+        } else {
+            crate::vfs::get_file(path).ok()
+        };
+        if let Some(file) = tmp {
+            task.files[res] = Some(file);
+            args.rsi = res as u64;
+        } else {
+            args.rsi = u64::MAX;
+        }
     } else {
-        crate::vfs::get_file(path).ok()
-    };
-    args.rsi = res as u64;
+        args.rsi = u64::MAX;
+    }
 }
 
 pub fn sys_read2(args: &mut SyscallStackFrame) {

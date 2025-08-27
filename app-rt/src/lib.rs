@@ -108,7 +108,7 @@ pub fn sys_getticks() -> usize {
     }
 }
 
-pub fn sys_info(tp: u64) -> usize {
+pub fn sys_info(tp: u64) -> Option<usize> {
     unsafe {
         let res;
         core::arch::asm!(
@@ -117,11 +117,14 @@ pub fn sys_info(tp: u64) -> usize {
             in("rdi") tp,
             out("rcx") res,
         );
-        res
+        match res {
+            usize::MAX => None,
+            v => Some(v),
+        }
     }
 }
 
-pub fn sys_open(name: &str, do_create: bool) -> usize {
+pub fn sys_open(name: &str, do_create: bool) -> Option<usize> {
     unsafe {
         let res;
         core::arch::asm!(
@@ -132,7 +135,10 @@ pub fn sys_open(name: &str, do_create: bool) -> usize {
             in("r10") do_create as usize,
             out("rsi") res,
         );
-        res
+        match res {
+            usize::MAX => None,
+            v => Some(v),
+        }
     }
 }
 

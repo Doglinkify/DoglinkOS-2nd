@@ -15,7 +15,6 @@ use x86_64::{PhysAddr, VirtAddr};
 use crate::mm::page_alloc::{dealloc_physical_page, find_continuous_mem, DLOSFrameAllocator};
 use crate::mm::phys_to_virt;
 use crate::pcie::enumrate::doit;
-use crate::println;
 
 type SharedNvmeDevice = Arc<Mutex<Device<NvmeAllocator>>>;
 type LockedQueuePair = Mutex<IoQueuePair<NvmeAllocator>>;
@@ -24,8 +23,10 @@ pub struct NvmeAllocator;
 
 impl Allocator for NvmeAllocator {
     unsafe fn allocate(&self, size: usize) -> usize {
-        println!("[DEBUG] NvmeAllocator got a request of {size} bytes");
-        phys_to_virt(find_continuous_mem(size.div_ceil(4096))) as usize
+        // println!("[DEBUG] NvmeAllocator got a request of {size} bytes");
+        let res = phys_to_virt(find_continuous_mem(size.div_ceil(4096))) as usize;
+        (res as *mut u8).write_bytes(0, 4096);
+        res
     }
 
     unsafe fn deallocate(&self, addr: usize) {
@@ -176,6 +177,8 @@ impl NvmeManager {
 }
 
 pub static NVME: Lazy<NvmeManager> = Lazy::new(|| {
+    // crate::println!("[INFO] nvme: initializer called");
+
     let mut connections = Vec::new();
 
     doit(|_, _, _, config| {
@@ -191,16 +194,20 @@ pub static NVME: Lazy<NvmeManager> = Lazy::new(|| {
             };
             for pg in 0..32 {
                 unsafe {
-                    pgt.map_to(
-                        Page::<Size4KiB>::containing_address(VirtAddr::new(
-                            virtual_address + pg * 4096,
-                        )),
-                        PhysFrame::containing_address(PhysAddr::new(physical_address + pg * 4096)),
-                        PageTableFlags::WRITABLE | PageTableFlags::PRESENT,
-                        &mut DLOSFrameAllocator,
-                    )
-                    .unwrap()
-                    .flush();
+                    let _ = pgt
+                        .map_to(
+                            Page::<Size4KiB>::containing_address(VirtAddr::new(
+                                virtual_address + pg * 4096,
+                            )),
+                            PhysFrame::containing_address(PhysAddr::new(
+                                physical_address + pg * 4096,
+                            )),
+                            PageTableFlags::WRITABLE
+                                | PageTableFlags::PRESENT
+                                | PageTableFlags::NO_CACHE,
+                            &mut DLOSFrameAllocator,
+                        )
+                        .map(|f| f.flush());
                 }
             }
 
@@ -209,6 +216,8 @@ pub static NVME: Lazy<NvmeManager> = Lazy::new(|| {
             connections.push(Arc::new(Mutex::new(device)));
         }
     });
+
+    // crate::println!("[INFO] nvme: initializer returned");
 
     NvmeManager(connections)
 });

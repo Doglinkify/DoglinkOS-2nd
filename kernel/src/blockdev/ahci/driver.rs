@@ -19,6 +19,7 @@ pub struct Ahci {
     pub port: &'static HbaPort,
     pub cmd_list: &'static [CommandHeader],
     pub cmd_table: &'static mut CommandTable,
+    pub recieved_fis: &'static mut [u8],
 }
 
 unsafe impl Send for Ahci {}
@@ -28,9 +29,8 @@ impl Ahci {
     pub fn new(address: VirtAddr) -> Vec<Self> {
         let hba_memory = unsafe { &*address.as_mut_ptr::<HbaMemory>() };
 
-        if !hba_memory.ahci_enabled() {
-            return Vec::new();
-        }
+        hba_memory.enable_ahci();
+        hba_memory.disable_interrupt();
 
         (0..hba_memory.support_port_count())
             .filter(|&port_num| hba_memory.port_active(port_num))
@@ -41,7 +41,9 @@ impl Ahci {
 
     pub fn identity(&mut self) -> IdentifyData {
         unsafe {
+            // crate::println!("[DEBUG] ahci/driver.rs: Ahci::identity() called");
             self.execute_command(CMD_IDENTIFY_DEVICE, 0);
+            // crate::println!("[DEBUG] ahci/driver.rs: Ahci::identity() returned");
             (&*(self.data.as_ptr() as *const Identify)).into()
         }
     }
@@ -59,8 +61,12 @@ impl Ahci {
     }
 
     unsafe fn execute_command(&mut self, command: u8, start_sector: u64) {
+        // crate::println!(
+        //     "[DEBUG] ahci/driver.rs: Ahci::execute_command({command},{start_sector}) called"
+        // );
         let cmd_table = &mut *self.cmd_table;
         let fis = &mut *(cmd_table.cfis.as_mut_ptr() as *mut FisRegH2D);
+        *fis = core::mem::zeroed();
         fis.fis_type = FIS_TYPE_REG_H2D;
         fis.cflags = 1 << 7;
         fis.command = command;
@@ -75,6 +81,9 @@ impl Ahci {
 
         self.port.command_issue.set(1 << 0);
         while self.port.command_issue.get().get_bit(0) {}
+        // crate::println!(
+        //     "[DEBUG] ahci/driver.rs: Ahci::execute_command({command},{start_sector}) returned"
+        // );
     }
 }
 

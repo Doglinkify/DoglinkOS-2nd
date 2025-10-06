@@ -1,7 +1,11 @@
 use alloc::{sync::Arc, vec::Vec};
 use identify::IdentifyData;
 use spin::{Lazy, Mutex};
-use x86_64::VirtAddr;
+use x86_64::{
+    registers::control::Cr3,
+    structures::paging::{Mapper, OffsetPageTable, Page, PageTable, PageTableFlags, Size4KiB},
+    VirtAddr,
+};
 
 use crate::mm::phys_to_virt;
 
@@ -96,10 +100,16 @@ impl crate::vfs::VfsFile for AhciBlockDevice {
 
 impl AhciManager {
     pub fn iter(&self) -> impl Iterator<Item = AhciBlockDevice> + use<'_> {
-        self.0.iter().map(|device| AhciBlockDevice {
-            device: device.clone(),
-            identify: device.lock().identity(),
-            cur_pos: 0,
+        // println!("[DEBUG] ahci: AhciManager::iter() called");
+        self.0.iter().map(|device| {
+            // println!("[DEBUG] ahci: mapping function inside AhciManager::iter() called");
+            let t = AhciBlockDevice {
+                device: device.clone(),
+                identify: device.lock().identity(),
+                cur_pos: 0,
+            };
+            // println!("[DEBUG] ahci: mapping function inside AhciManager::iter() returned");
+            t
         })
     }
 }
@@ -107,23 +117,49 @@ impl AhciManager {
 pub struct AhciManager(Vec<Arc<Mutex<Ahci>>>);
 
 pub static AHCI: Lazy<AhciManager> = Lazy::new(|| {
+    // println!("[INFO] ahci: initializer called");
+
     let mut connections = Vec::new();
 
     crate::pcie::enumrate::doit(|_, _, _, device| {
         if device.class_code == 1 && device.subclass == 6 {
             let virtual_address = phys_to_virt((device.bar[5] & 0xfffffff0u32) as u64);
-
+            unsafe {
+                let mut pgt = OffsetPageTable::new(
+                    &mut *(phys_to_virt(Cr3::read().0.start_address().as_u64()) as *mut PageTable),
+                    VirtAddr::new(crate::mm::phys_to_virt(0)),
+                );
+                let _ = pgt
+                    .update_flags(
+                        Page::<Size4KiB>::containing_address(VirtAddr::new(virtual_address)),
+                        PageTableFlags::WRITABLE
+                            | PageTableFlags::PRESENT
+                            | PageTableFlags::NO_CACHE,
+                    )
+                    .map(|u| u.flush());
+                let _ = pgt
+                    .update_flags(
+                        Page::<Size4KiB>::containing_address(VirtAddr::new(virtual_address + 4096)),
+                        PageTableFlags::WRITABLE
+                            | PageTableFlags::PRESENT
+                            | PageTableFlags::NO_CACHE,
+                    )
+                    .map(|u| u.flush());
+            }
             for ahci_device in Ahci::new(VirtAddr::new(virtual_address)) {
                 connections.push(Arc::new(Mutex::new(ahci_device)));
             }
         }
     });
 
+    // println!("[INFO] ahci: initializer returned");
+
     AhciManager(connections)
 });
 
 pub fn init() {
     for ahci in AHCI.iter() {
+        // println!("[DEBUG] ahci: loop in init() begin");
         let res = crate::mm::convert_unit(ahci.identify.block_count * BLOCK_SIZE as u64);
         crate::println!(
             "[INFO] blockdev: achi: found {}, size = {} {}",
@@ -131,5 +167,6 @@ pub fn init() {
             res.0,
             res.1
         );
+        // println!("[DEBUG] ahci: loop in init() end");
     }
 }

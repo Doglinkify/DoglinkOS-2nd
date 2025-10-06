@@ -41,6 +41,7 @@ pub fn parse_madt() -> u64 {
     let res = acpi.platform_info().unwrap().interrupt_model;
     if let InterruptModel::Apic(apic) = res {
         let ioapic = apic.io_apics[0].address;
+        println!("[INFO] acpi: parse_madt() returned");
         ioapic as u64
     } else {
         panic!("acpi: unknown interrupt model");
@@ -48,9 +49,11 @@ pub fn parse_madt() -> u64 {
 }
 
 pub fn parse_mcfg() -> u64 {
+    println!("[INFO] acpi: parse_mcfg() called");
     let acpi =
         unsafe { AcpiTables::from_rsdp(Handler, *RSDP_PA - (phys_to_virt(0) as usize)).unwrap() };
     let res = PciConfigRegions::new(&acpi).unwrap();
     let res2 = res.iter().next().unwrap().physical_address;
+    println!("[INFO] acpi: parse_mcfg() returned");
     res2 as u64
 }

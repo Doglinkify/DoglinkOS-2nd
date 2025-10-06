@@ -38,5 +38,5 @@ pub fn convert_unit(size: u64) -> (f32, &'static str) {
         tf /= 1024.0;
         level += 1;
     }
-    (tf, ["B", "KiB", "MiB", "GiB"][level])
+    (tf, ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"][level])
 }

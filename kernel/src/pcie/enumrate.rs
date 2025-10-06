@@ -43,6 +43,7 @@ where
 }
 
 pub fn init() {
+    crate::println!("[INFO] pcie: init() called");
     *pcie_mmio_base.lock() = phys_to_virt(crate::acpi::parse_mcfg());
 }
 

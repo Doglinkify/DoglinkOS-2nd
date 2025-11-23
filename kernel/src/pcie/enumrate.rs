@@ -36,10 +36,10 @@ where
     F: FnMut(u8, u8, u8, &PCIConfigSpace),
 {
     let config = get_config_space(bus, device, function);
-    if config.vendor_id != 65535 {
+    if config.vendor_id != 65535 && config.vendor_id != 0 {
         hook(bus, device, function, config);
     }
-    config.vendor_id != 65535 && config.header_type & 0x80 == 0x80
+    config.vendor_id != 65535 && config.vendor_id != 0 && config.header_type & 0x80 == 0x80
 }
 
 pub fn init() {

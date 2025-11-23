@@ -82,6 +82,22 @@ fn shell_main_loop() {
             } else {
                 println!("error while opening /dev/nvme0-0");
             }
+        } else if cmd == "disk-size" {
+            if let Some(fd) = sys_open("/dev/disk0", false) {
+                let sz = sys_seek(fd, 0, SEEK_END);
+                println!("/dev/disk0 is {sz:?} bytes");
+                sys_close(fd);
+            } else {
+                println!("error while opening /dev/disk0");
+            }
+        } else if cmd == "nvme-size" {
+            if let Some(fd) = sys_open("/dev/nvme0-0", false) {
+                let sz = sys_seek(fd, 0, SEEK_END);
+                println!("/dev/nvme0-0 is {sz:?} bytes");
+                sys_close(fd);
+            } else {
+                println!("error while opening /dev/nvme0-0");
+            }
         } else if cmd == "initrd-read" {
             if let Some(fd) = sys_open("/dev/initrd", false) {
                 let mut content = [0; 512];

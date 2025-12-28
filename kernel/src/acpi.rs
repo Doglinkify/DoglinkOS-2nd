@@ -2,9 +2,11 @@ use crate::mm::phys_to_virt;
 use crate::println;
 use acpi::handler::AcpiHandler;
 use acpi::handler::PhysicalMapping;
+use acpi::mcfg::PciConfigEntry;
 use acpi::platform::interrupt::InterruptModel;
 use acpi::AcpiTables;
 use acpi::PciConfigRegions;
+use alloc::vec::Vec;
 use core::ptr::NonNull;
 use limine::request::RsdpRequest;
 use spin::Lazy;
@@ -48,12 +50,9 @@ pub fn parse_madt() -> u64 {
     }
 }
 
-pub fn parse_mcfg() -> u64 {
-    println!("[INFO] acpi: parse_mcfg() called");
+pub static PCI_CONFIG_REGIONS: Lazy<Vec<PciConfigEntry>> = Lazy::new(|| {
     let acpi =
         unsafe { AcpiTables::from_rsdp(Handler, *RSDP_PA - (phys_to_virt(0) as usize)).unwrap() };
     let res = PciConfigRegions::new(&acpi).unwrap();
-    let res2 = res.iter().next().unwrap().physical_address;
-    println!("[INFO] acpi: parse_mcfg() returned");
-    res2 as u64
-}
+    res.iter().collect()
+});

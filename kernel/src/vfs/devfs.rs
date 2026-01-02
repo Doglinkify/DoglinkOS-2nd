@@ -58,11 +58,11 @@ impl VfsFile for StderrDevice {
 
 impl VfsDirectory for DevFileSystem {
     fn file(&self, path: &str) -> Result<Arc<Mutex<dyn VfsFile + '_>>, ()> {
-        if path.starts_with("/disk") {
+        if let Some(number) = path.strip_prefix("/disk") {
             Ok(Arc::new(Mutex::new(
                 crate::blockdev::ahci::AHCI
                     .iter()
-                    .nth(path[5..].parse().map_err(|_| ())?)
+                    .nth(number.parse().map_err(|_| ())?)
                     .ok_or(())?,
             )))
         } else if path.starts_with("/nvme") {

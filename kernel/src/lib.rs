@@ -3,9 +3,8 @@
 #![feature(array_ptr_get)]
 #![feature(str_from_raw_parts)]
 #![allow(non_snake_case)]
-#![allow(dead_code)]
-#![allow(non_upper_case_globals)]
-#![allow(static_mut_refs)]
+#![allow(clippy::missing_safety_doc)]
+#![allow(clippy::result_unit_err)]
 
 extern crate alloc;
 pub mod acpi;

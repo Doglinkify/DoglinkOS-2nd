@@ -32,8 +32,6 @@ static _START_MARKER: RequestsStartMarker = RequestsStartMarker::new();
 static _END_MARKER: RequestsEndMarker = RequestsEndMarker::new();
 
 #[no_mangle]
-#[allow(named_asm_labels)]
-#[allow(clippy::empty_loop)]
 extern "C" fn kmain() -> ! {
     assert!(BASE_REVISION.is_supported());
     init_mm();
@@ -75,7 +73,7 @@ extern "C" fn kmain() -> ! {
             );
             unreachable!();
         } else {
-            loop {}
+            hang();
         }
     }
 }

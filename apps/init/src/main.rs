@@ -48,8 +48,8 @@ fn shell_main_loop() {
             );
             println!("Current shell PID: {}", sys_info(2).unwrap());
             println!("Current kernel ticks: {}", sys_info(3).unwrap());
-        } else if cmd.starts_with("echo ") {
-            println!("{}", &cmd[5..]);
+        } else if let Some(content) = cmd.strip_prefix("echo ") {
+            println!("{content}");
         } else if cmd == "clear" {
             print!("\x1b[H\x1b[2J\x1b[3J");
         } else if cmd == "file-read" {
@@ -107,9 +107,9 @@ fn shell_main_loop() {
             } else {
                 println!("error while opening /dev/initrd");
             }
-        } else if cmd.starts_with("file-write ") {
+        } else if let Some(content) = cmd.strip_prefix("file-write ") {
             if let Some(fd) = sys_open("/test.txt", true) {
-                sys_write(fd, &cmd[11..]);
+                sys_write(fd, content);
                 sys_close(fd);
             } else {
                 println!("error while opening /test.txt");

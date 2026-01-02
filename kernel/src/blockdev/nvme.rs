@@ -183,8 +183,8 @@ pub static NVME: Lazy<NvmeManager> = Lazy::new(|| {
 
     doit(|_, _, _, config| {
         if config.class_code == 1 && config.subclass == 8 {
-            let physical_address = (config.bar[0] & 0xfffffff0u32) as u64
-                + (((config.bar[1] & 0xffffffffu32) as u64) << 32);
+            let physical_address =
+                (config.bar[0] & 0xfffffff0u32) as u64 + ((config.bar[1] as u64) << 32);
             let virtual_address = phys_to_virt(physical_address);
             let mut pgt = unsafe {
                 OffsetPageTable::new(

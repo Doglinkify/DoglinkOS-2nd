@@ -6,7 +6,6 @@ use x86_64::PhysAddr;
 pub static CURRENT_TASK_ID: AtomicUsize = AtomicUsize::new(0);
 pub static TOTAL_TICKS: AtomicUsize = AtomicUsize::new(0);
 
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn switch_to(
     context: &mut super::process::ProcessContext,
     next: usize,
@@ -46,7 +45,7 @@ pub fn switch_to(
     }
 }
 
-pub extern "C" fn timer(context: *mut super::process::ProcessContext) {
+pub(crate) extern "C" fn timer(context: *mut super::process::ProcessContext) {
     x86_64::instructions::interrupts::disable();
     schedule(unsafe { &mut *context }, false);
     TOTAL_TICKS.fetch_add(1, Ordering::Relaxed);
@@ -54,7 +53,6 @@ pub extern "C" fn timer(context: *mut super::process::ProcessContext) {
     crate::apic::local::eoi();
 }
 
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn schedule(context: &mut super::process::ProcessContext, current_process_exited: bool) {
     let mut max_tm = 0;
     let mut max_tid = 127;

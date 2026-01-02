@@ -1,6 +1,6 @@
 use crate::println;
-use crate::task::process::original_kernel_cr3;
 use crate::task::process::ProcessContext as SyscallStackFrame;
+use crate::task::process::ORIGINAL_KERNEL_CR3;
 use crate::vfs::SeekFrom;
 use core::arch::naked_asm;
 use core::sync::atomic::Ordering;
@@ -68,16 +68,15 @@ const SYSCALL_TABLE: [fn(&mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_remove,
 ];
 
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
-pub extern "C" fn do_syscall(args: *mut SyscallStackFrame) {
+unsafe extern "C" fn do_syscall(args: *mut SyscallStackFrame) {
     let call_num = unsafe { (*args).rax as usize };
     if call_num < NUM_SYSCALLS {
         if call_num == 4 {
             // sys_exit will free the current page table, so switch to original kernel page table
             unsafe {
                 x86_64::registers::control::Cr3::write(
-                    original_kernel_cr3.0,
-                    original_kernel_cr3.1,
+                    ORIGINAL_KERNEL_CR3.0,
+                    ORIGINAL_KERNEL_CR3.1,
                 );
             }
         }
@@ -92,9 +91,8 @@ pub fn sys_test(_: &mut SyscallStackFrame) {
     println!("test syscall");
 }
 
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn sys_write(args: &mut SyscallStackFrame) {
-    let (fd, ptr, size) = ((*args).rdi, (*args).rsi, (*args).rcx);
+    let (fd, ptr, size) = (args.rdi, args.rsi, args.rcx);
     // println!("[DEBUG] sys_write: to {fd} ptr 0x{ptr:x} size {size}");
     let current = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
     let mut tasks = crate::task::process::TASKS.lock();
@@ -119,22 +117,20 @@ pub fn sys_exit(args: &mut SyscallStackFrame) {
 
 pub fn sys_read(args: &mut SyscallStackFrame) {
     let res = crate::console::INPUT_BUFFER.pop().unwrap_or(0xff);
-    (*args).rcx = res as u64;
+    args.rcx = res as u64;
 }
 
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn sys_setfsbase(args: &mut SyscallStackFrame) {
     use x86_64::VirtAddr;
-    x86_64::registers::model_specific::FsBase::write(VirtAddr::new((*args).rdi));
+    x86_64::registers::model_specific::FsBase::write(VirtAddr::new(args.rdi));
 }
 
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn sys_brk(args: &mut SyscallStackFrame) {
     let current = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
     let mut tasks = crate::task::process::TASKS.lock();
     let task = tasks[current].as_mut().unwrap();
-    (*args).rsi = task.brk;
-    let tmp = (*args).rdi;
+    args.rsi = task.brk;
+    let tmp = args.rdi;
     if tmp != 0 {
         task.brk = tmp;
     }
@@ -145,21 +141,21 @@ pub fn sys_waitpid(args: &mut SyscallStackFrame) {
         let current = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
         let mut tasks = crate::task::process::TASKS.lock();
         let task = tasks[current].as_mut().unwrap();
-        task.waiting_pid = Some((*args).rdi as usize);
+        task.waiting_pid = Some(args.rdi as usize);
     }
     crate::task::sched::schedule(args, false);
 }
 
 pub fn sys_getpid(args: &mut SyscallStackFrame) {
-    (*args).rcx = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed) as u64;
+    args.rcx = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed) as u64;
 }
 
 pub fn sys_getticks(args: &mut SyscallStackFrame) {
-    (*args).rcx = crate::task::sched::TOTAL_TICKS.load(Ordering::Relaxed) as u64;
+    args.rcx = crate::task::sched::TOTAL_TICKS.load(Ordering::Relaxed) as u64;
 }
 
 pub fn sys_info(args: &mut SyscallStackFrame) {
-    (*args).rcx = match (*args).rdi {
+    args.rcx = match args.rdi {
         0 => crate::console::TERMINAL.lock().columns() as u64,
         1 => crate::console::TERMINAL.lock().rows() as u64,
         2 => crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed) as u64,
@@ -237,5 +233,5 @@ pub fn sys_close(args: &mut SyscallStackFrame) {
 
 pub fn sys_remove(args: &mut SyscallStackFrame) {
     let path = unsafe { core::str::from_raw_parts(args.rdi as *const u8, args.rcx as usize) };
-    let _ = crate::vfs::remove_file(path);
+    crate::vfs::remove_file(path);
 }

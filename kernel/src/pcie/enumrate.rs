@@ -14,7 +14,7 @@ pub struct PCIConfigSpace {
     pub cache_line_size: u8,
     pub latency_timer: u8,
     pub header_type: u8,
-    pub BIST: u8,
+    pub bist: u8,
     pub bar: [u32; 6],
     // TODO
 }

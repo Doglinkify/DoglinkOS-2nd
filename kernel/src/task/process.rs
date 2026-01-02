@@ -2,6 +2,7 @@ use crate::mm::page_alloc::alloc_physical_page;
 use crate::mm::phys_to_virt;
 use alloc::sync::Arc;
 use core::cmp::max;
+use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
 use spin::Lazy;
 use spin::Mutex;
@@ -54,7 +55,7 @@ pub struct Process<'a> {
     pub files: [Option<Arc<Mutex<dyn crate::vfs::VfsFile>>>; 64],
 }
 
-pub static original_kernel_cr3: Lazy<(PhysFrame, Cr3Flags)> = Lazy::new(Cr3::read);
+pub static ORIGINAL_KERNEL_CR3: Lazy<(PhysFrame, Cr3Flags)> = Lazy::new(Cr3::read);
 
 const FPU_INIT: [u128; 32] = [
     0x037fu128,
@@ -113,7 +114,7 @@ impl Process<'_> {
         let p4t_va = phys_to_virt(p4t_pa);
         let p4t = unsafe { &mut *(p4t_va as *mut PageTable) };
         let kernel_p4t = unsafe {
-            &mut *(phys_to_virt(original_kernel_cr3.0.start_address().as_u64()) as *mut PageTable)
+            &mut *(phys_to_virt(ORIGINAL_KERNEL_CR3.0.start_address().as_u64()) as *mut PageTable)
         };
         Self::r_copy(kernel_p4t, p4t, 4, false, false);
         let page_table = unsafe {
@@ -172,7 +173,6 @@ impl Process<'_> {
         }
     }
 
-    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn copy_process(&mut self, context: &mut ProcessContext, new_tid: usize) -> Self {
         let p4t_pa = alloc_physical_page().unwrap();
         let p4t_va = phys_to_virt(p4t_pa);
@@ -180,7 +180,7 @@ impl Process<'_> {
         Self::r_copy(self.page_table.level_4_table_mut(), p4t, 4, true, false);
         let mut new_context = *context;
         new_context.rcx = 0;
-        (*context).rcx = new_tid as u64;
+        context.rcx = new_tid as u64;
         Self {
             page_table: unsafe {
                 OffsetPageTable::new(p4t, x86_64::addr::VirtAddr::new_truncate(phys_to_virt(0)))
@@ -246,24 +246,20 @@ impl Process<'_> {
 
 pub static TASKS: Mutex<[Option<Process>; 64]> = Mutex::new([const { None }; 64]);
 
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn do_fork(context: &mut ProcessContext) {
-    static mut next_tid: usize = 0;
-    unsafe {
-        next_tid += 1;
-    }
+    static NEXT_TID: AtomicUsize = AtomicUsize::new(0);
+    NEXT_TID.fetch_add(1, Ordering::Relaxed);
     let mut tasks = TASKS.lock();
     let new_process = tasks[super::sched::CURRENT_TASK_ID.load(Ordering::Relaxed)]
         .as_mut()
         .unwrap()
-        .copy_process(context, unsafe { next_tid });
-    tasks[unsafe { next_tid }] = Some(new_process);
+        .copy_process(context, NEXT_TID.load(Ordering::Relaxed));
+    tasks[NEXT_TID.load(Ordering::Relaxed)] = Some(new_process);
 }
 
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn do_exec(args: &mut ProcessContext) {
     let path = unsafe {
-        let slice = core::slice::from_raw_parts((*args).rdi as *const _, (*args).rcx as usize);
+        let slice = core::slice::from_raw_parts(args.rdi as *const _, args.rcx as usize);
         core::str::from_utf8(slice).unwrap()
     };
     if let Ok(elf_file_lock) = crate::vfs::get_file(path) {
@@ -277,7 +273,7 @@ pub fn do_exec(args: &mut ProcessContext) {
         current_task.fpu_state = FPU_INIT;
         current_task.fs = VirtAddr::zero();
         current_task.brk = 0;
-        let mut buf = alloc::vec![0u8; size as usize];
+        let mut buf = alloc::vec![0u8; size];
         elf_file.read_exact(buf.as_mut_slice());
         let new_elf = goblin::elf::Elf::parse(buf.as_slice());
         if let Ok(new_elf) = new_elf {
@@ -325,14 +321,13 @@ pub fn do_exec(args: &mut ProcessContext) {
                 }
             }
             // crate::println!("[DEBUG] will set rip to 0x{:x}", new_elf.entry);
-            (*args).rip = new_elf.entry;
-            (*args).rsp = 0x80000000 - 64;
+            args.rip = new_elf.entry;
+            args.rsp = 0x80000000 - 64;
         }
     }
     // returning from exec means something is wrong
 }
 
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn do_exit(args: &mut ProcessContext) {
     let c_tid = super::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
     // crate::println!("[DEBUG] task: process {c_tid} exited");

@@ -43,7 +43,6 @@ pub fn reset_gdt() {
     }
 }
 
-#[allow(named_asm_labels)]
 pub fn init() {
     unsafe {
         let flags = Cr3::read().1;
@@ -69,9 +68,10 @@ pub fn init() {
             "push rax",
             "pushfq",
             "push 0x1b",
-            "push offset cd",
+            "lea rax, [rip + 2f]",
+            "push rax",
             "iretq",
-            "cd:",
+            "2:",
             out("rax") _,
         );
     }

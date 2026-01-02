@@ -16,7 +16,7 @@ use spin::{Lazy, Mutex};
 static MODULE_REQUEST: ModuleRequest =
     ModuleRequest::new().with_internal_modules(&[&InternalModule::new().with_path(c"/initrd.img")]);
 
-static MOUNT_TABLE: Lazy<Vec<(String, Arc<dyn VfsDirectory + 'static>)>> = Lazy::new(|| Vec::new());
+static MOUNT_TABLE: Lazy<Vec<(String, Arc<dyn VfsDirectory + 'static>)>> = Lazy::new(Vec::new);
 
 pub trait VfsDirectory: Send + Sync {
     fn file(&self, path: &str) -> Result<Arc<Mutex<dyn VfsFile + '_>>, ()>;
@@ -101,10 +101,9 @@ pub fn create_file_or_open_existing(path: &str) -> Result<Arc<Mutex<dyn VfsFile>
 
 pub fn remove_file(path: &str) {
     for fs in MOUNT_TABLE.iter() {
-        if path.starts_with(&fs.0) {
-            if fs.1.remove(&path[(fs.0.len() - 1)..]) {
+        if path.starts_with(&fs.0)
+            && fs.1.remove(&path[(fs.0.len() - 1)..]) {
                 break;
             }
-        }
     }
 }

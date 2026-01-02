@@ -13,12 +13,12 @@ static HHDM_REQUEST: HhdmRequest = HhdmRequest::new();
 #[global_allocator]
 static ALLOCATOR: SpinLockedAllocator = SpinLockedAllocator::empty();
 
-pub static offset: Mutex<u64> = Mutex::new(0);
+pub static OFFSET: Mutex<u64> = Mutex::new(0);
 
 pub fn init() {
     let res = HHDM_REQUEST.get_response().unwrap();
     {
-        *offset.lock() = res.offset();
+        *OFFSET.lock() = res.offset();
     }
     self::page_alloc::init();
     let heap_start_address = phys_to_virt(self::page_alloc::find_continuous_mem(2048));
@@ -28,7 +28,7 @@ pub fn init() {
 }
 
 pub fn phys_to_virt(addr: u64) -> u64 {
-    addr + *offset.lock()
+    addr + *OFFSET.lock()
 }
 
 pub fn convert_unit(size: u64) -> (f32, &'static str) {

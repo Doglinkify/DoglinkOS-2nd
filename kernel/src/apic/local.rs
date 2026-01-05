@@ -1,8 +1,8 @@
 use crate::mm::phys_to_virt;
 use crate::println;
+use crate::rtc::{perform_sleep as rtc_perform_sleep, prepare_sleep as rtc_prepare_sleep};
 use spin::Mutex;
 use x2apic::lapic::{xapic_base, LocalApic, LocalApicBuilder, TimerDivide, TimerMode};
-use crate::rtc::{prepare_sleep as rtc_prepare_sleep, perform_sleep as rtc_perform_sleep};
 
 static LAPIC: Mutex<Option<LocalApic>> = Mutex::new(None);
 

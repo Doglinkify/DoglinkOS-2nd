@@ -101,9 +101,8 @@ pub fn create_file_or_open_existing(path: &str) -> Result<Arc<Mutex<dyn VfsFile>
 
 pub fn remove_file(path: &str) {
     for fs in MOUNT_TABLE.iter() {
-        if path.starts_with(&fs.0)
-            && fs.1.remove(&path[(fs.0.len() - 1)..]) {
-                break;
-            }
+        if path.starts_with(&fs.0) && fs.1.remove(&path[(fs.0.len() - 1)..]) {
+            break;
+        }
     }
 }

@@ -1,9 +1,7 @@
 #![no_std]
 #![feature(abi_x86_interrupt)]
-#![feature(array_ptr_get)]
 #![feature(str_from_raw_parts)]
 #![allow(non_snake_case)]
-#![allow(clippy::missing_safety_doc)]
 #![allow(clippy::result_unit_err)]
 
 extern crate alloc;

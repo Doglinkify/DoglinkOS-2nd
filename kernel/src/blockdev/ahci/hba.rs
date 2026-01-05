@@ -115,7 +115,7 @@ impl HbaPort {
 }
 
 impl HbaPort {
-    pub unsafe fn init_ahci(&'static self) -> Ahci {
+    pub(super) unsafe fn init_ahci(&'static self) -> Ahci {
         self.stop_cmd_and_reset();
 
         let cmd_list_pa = alloc_physical_page().unwrap();

@@ -36,6 +36,10 @@ struct Args {
     #[argh(switch, short = 'n')]
     #[argh(description = "use nvme disk instead of ahci disk")]
     nvme: bool,
+
+    #[argh(switch, short = 's')]
+    #[argh(description = "enable sound card")]
+    sound: bool,
 }
 
 fn main() {
@@ -56,17 +60,19 @@ fn main() {
         cmd.arg("-smp").arg(format!("cores={}", args.cores));
         cmd.arg("-cpu").arg("qemu64,+x2apic");
 
-        // if let Some(backend) = match std::env::consts::OS {
-        //     "linux" => Some("pa"),
-        //     "macos" => Some("coreaudio"),
-        //     "windows" => Some("dsound"),
-        //     _ => None,
-        // } {
-        //     cmd.arg("-audiodev").arg(format!("{},id=sound", backend));
-        //     cmd.arg("-machine").arg("pcspk-audiodev=sound");
-        //     cmd.arg("-device").arg("intel-hda");
-        //     cmd.arg("-device").arg("hda-output,audiodev=sound");
-        // }
+        if args.sound {
+            if let Some(backend) = match std::env::consts::OS {
+                "linux" => Some("pa"),
+                "macos" => Some("coreaudio"),
+                "windows" => Some("dsound"),
+                _ => None,
+            } {
+                cmd.arg("-audiodev").arg(format!("{},id=sound", backend));
+                cmd.arg("-machine").arg("pcspk-audiodev=sound");
+                cmd.arg("-device").arg("intel-hda");
+                cmd.arg("-device").arg("hda-output,audiodev=sound");
+            }
+        }
 
         if args.nvme {
             cmd.arg("-device").arg("nvme,drive=disk1,serial=deadbeef");
@@ -98,6 +104,7 @@ fn main() {
 fn build_img() -> PathBuf {
     let doglinked_path = Path::new(env!("CARGO_BIN_FILE_DOGLINKED"));
     let t_path = Path::new(env!("CARGO_BIN_FILE_INFINITE_LOOP"));
+    let imgtest_path = Path::new(env!("CARGO_BIN_FILE_IMAGE_TEST"));
 
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let assets_dir = manifest_dir.join("assets");
@@ -105,6 +112,7 @@ fn build_img() -> PathBuf {
     let initrd_files = BTreeMap::from([
         ("/sbin/doglinked", doglinked_path.to_path_buf()),
         ("/bin/exiter", t_path.to_path_buf()),
+        ("/bin/imgtest", imgtest_path.to_path_buf()),
         ("/bin/hello-std", assets_dir.join("hello_std.elf")),
         ("/bin/dins-empty", assets_dir.join("empty.elf")),
         ("/bin/dins-hello", assets_dir.join("hello.elf")),

@@ -46,6 +46,12 @@ fn shell_main_loop() {
                 sys_info(1).unwrap(),
                 sys_info(0).unwrap()
             );
+            println!(
+                "Framebuffer: {} x {}, pitch {}",
+                sys_info(6).unwrap(),
+                sys_info(7).unwrap(),
+                sys_info(9).unwrap()
+            );
             println!("Current shell PID: {}", sys_info(2).unwrap());
             println!("Current kernel ticks: {}", sys_info(3).unwrap());
         } else if let Some(content) = cmd.strip_prefix("echo ") {

@@ -6,11 +6,12 @@ use os_terminal::{DrawTarget, Rgb};
 #[link_section = ".requests"]
 pub static FRAMEBUFFER_REQUEST: FramebufferRequest = FramebufferRequest::new();
 
+#[derive(Clone, Copy)]
 pub struct FrameBuffer {
-    width: usize,
-    height: usize,
-    addr: usize,
-    pitch: usize,
+    pub width: usize,
+    pub height: usize,
+    pub addr: usize,
+    pub pitch: usize,
 }
 
 impl FrameBuffer {

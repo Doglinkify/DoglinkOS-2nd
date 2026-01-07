@@ -168,6 +168,10 @@ pub fn sys_info(args: &mut SyscallStackFrame) {
             crate::console::ECHO_FLAG.store(true, Ordering::Relaxed);
             0
         }
+        6 => crate::console::FRAMEBUFFER.width as u64,
+        7 => crate::console::FRAMEBUFFER.height as u64,
+        8 => crate::console::FRAMEBUFFER.addr as u64,
+        9 => crate::console::FRAMEBUFFER.pitch as u64,
         _ => u64::MAX,
     };
 }

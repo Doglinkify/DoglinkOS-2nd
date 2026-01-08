@@ -122,6 +122,16 @@ fn shell_main_loop() {
             }
         } else if cmd.starts_with("file-rm") {
             sys_remove("/test.txt");
+        } else if let Some(freq) = cmd.strip_prefix("beep ") {
+            if let Some(fd) = sys_open("/dev/pcspk", false) {
+                sys_write(fd, freq);
+                let start = sys_getticks();
+                while sys_getticks() < start + 50 {}
+                sys_write(fd, "stop");
+                sys_close(fd);
+            } else {
+                println!("error while opening /test.txt");
+            }
         } else {
             let mut buf2 = [0u8; 128];
             buf2[0..5].copy_from_slice(b"/bin/");

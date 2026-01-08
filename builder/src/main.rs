@@ -104,7 +104,6 @@ fn main() {
 fn build_img() -> PathBuf {
     let doglinked_path = Path::new(env!("CARGO_BIN_FILE_DOGLINKED"));
     let t_path = Path::new(env!("CARGO_BIN_FILE_INFINITE_LOOP"));
-    let imgtest_path = Path::new(env!("CARGO_BIN_FILE_IMAGE_TEST"));
 
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let assets_dir = manifest_dir.join("assets");
@@ -112,7 +111,6 @@ fn build_img() -> PathBuf {
     let initrd_files = BTreeMap::from([
         ("/sbin/doglinked", doglinked_path.to_path_buf()),
         ("/bin/exiter", t_path.to_path_buf()),
-        ("/bin/imgtest", imgtest_path.to_path_buf()),
         ("/bin/hello-std", assets_dir.join("hello_std.elf")),
         ("/bin/dins-empty", assets_dir.join("empty.elf")),
         ("/bin/dins-hello", assets_dir.join("hello.elf")),

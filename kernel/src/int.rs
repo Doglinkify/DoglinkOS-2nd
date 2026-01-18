@@ -1,6 +1,7 @@
 use crate::println;
 use core::arch::naked_asm;
 use spin::Lazy;
+use x86_64::instructions::port::PortReadOnly;
 use x86_64::registers::control::Cr2;
 use x86_64::structures::idt::InterruptDescriptorTable;
 use x86_64::structures::idt::InterruptStackFrame;
@@ -13,6 +14,7 @@ pub static IDT: Lazy<InterruptDescriptorTable> = Lazy::new(|| {
     temp[33].set_handler_fn(handler2);
     temp[34].set_handler_fn(handler3);
     temp[36].set_handler_fn(handler4);
+    temp[47].set_handler_fn(handler7);
     temp[0x80]
         .set_handler_fn(crate::task::syscall::syscall_handler)
         .set_privilege_level(PrivilegeLevel::Ring3);
@@ -117,4 +119,10 @@ pub extern "x86-interrupt" fn handler6(f: InterruptStackFrame, c: u64) {
         f.instruction_pointer, c
     );
     loop {}
+}
+
+pub extern "x86-interrupt" fn handler7(_: InterruptStackFrame) {
+    let packet = unsafe { PortReadOnly::<u8>::new(0x60).read() };
+    crate::mouse::handle(packet);
+    crate::apic::local::eoi();
 }

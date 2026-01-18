@@ -13,6 +13,7 @@ use DoglinkOS_2nd::cpu::show_cpu_info;
 use DoglinkOS_2nd::int::init as init_interrupt;
 use DoglinkOS_2nd::mm::init as init_mm;
 use DoglinkOS_2nd::mm::page_alloc::test as test_page_alloc;
+use DoglinkOS_2nd::mouse::init as init_mouse;
 use DoglinkOS_2nd::pcie::enumrate::doit;
 use DoglinkOS_2nd::println;
 use DoglinkOS_2nd::task::{init as init_task, init_sse, reset_gdt};
@@ -48,6 +49,7 @@ extern "C" fn kmain() -> ! {
     init_interrupt();
     init_lapic();
     init_ioapic(parse_madt());
+    init_mouse();
     init_ahci();
     init_nvme();
     show_cpu_info();

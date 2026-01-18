@@ -12,10 +12,13 @@ pub fn init(ioapic_phys_addr: u64) {
         let mut tmp = IoApic::new(ioapic_virt_addr);
         tmp.init(35);
         tmp.enable_irq(1);
+        tmp.enable_irq(12);
         let mut ent_1 = tmp.table_entry(1);
         ent_1.set_dest(0);
-        //        println!("{ent_1:#?}");
         tmp.set_table_entry(1, ent_1);
+        let mut ent_12 = tmp.table_entry(12);
+        ent_12.set_dest(0);
+        tmp.set_table_entry(12, ent_12);
         Some(tmp)
     };
     println!("[INFO] it didn't crash!");

@@ -12,6 +12,7 @@ pub mod console;
 pub mod cpu;
 pub mod int;
 pub mod mm;
+pub mod mouse;
 pub mod pcie;
 pub mod rtc;
 pub mod sound;

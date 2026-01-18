@@ -60,19 +60,18 @@ fn main() {
         cmd.arg("-smp").arg(format!("cores={}", args.cores));
         cmd.arg("-cpu").arg("qemu64,+x2apic");
 
-        if args.sound {
-            if let Some(backend) = match std::env::consts::OS {
+        if args.sound
+            && let Some(backend) = match std::env::consts::OS {
                 "linux" => Some("pa"),
                 "macos" => Some("coreaudio"),
                 "windows" => Some("dsound"),
                 _ => None,
             } {
-                cmd.arg("-audiodev").arg(format!("{},id=sound", backend));
+                cmd.arg("-audiodev").arg(format!("{backend},id=sound"));
                 cmd.arg("-machine").arg("pcspk-audiodev=sound");
                 cmd.arg("-device").arg("intel-hda");
                 cmd.arg("-device").arg("hda-output,audiodev=sound");
             }
-        }
 
         if args.nvme {
             cmd.arg("-device").arg("nvme,drive=disk1,serial=deadbeef");

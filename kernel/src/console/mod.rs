@@ -15,7 +15,7 @@ pub static FRAMEBUFFER: Lazy<FrameBuffer> = Lazy::new(|| {
 });
 
 pub static TERMINAL: Lazy<Mutex<Terminal<FrameBuffer>>> = Lazy::new(|| {
-    let mut terminal = Terminal::new(FRAMEBUFFER.clone());
+    let mut terminal = Terminal::new(*FRAMEBUFFER);
     terminal.set_font_manager(Box::new(BitmapFont));
     terminal.set_history_size(200);
     terminal.set_crnl_mapping(true);

@@ -46,11 +46,11 @@ pub fn switch_to(
 }
 
 pub(crate) extern "C" fn timer(context: *mut super::process::ProcessContext) {
+    crate::apic::local::eoi();
     x86_64::instructions::interrupts::disable();
     schedule(unsafe { &mut *context }, false);
     TOTAL_TICKS.fetch_add(1, Ordering::Relaxed);
     x86_64::instructions::interrupts::enable();
-    crate::apic::local::eoi();
 }
 
 pub fn schedule(context: &mut super::process::ProcessContext, current_process_exited: bool) {

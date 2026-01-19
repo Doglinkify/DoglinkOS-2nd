@@ -78,6 +78,7 @@ pub extern "x86-interrupt" fn handler3(_: InterruptStackFrame) {
 }
 
 pub extern "x86-interrupt" fn handler4(_: InterruptStackFrame) {
+    crate::apic::local::eoi();
     unsafe {
         let scancode: u8 = x86_64::instructions::port::PortReadOnly::new(0x60).read();
         let mut term = crate::console::TERMINAL.lock();
@@ -90,7 +91,6 @@ pub extern "x86-interrupt" fn handler4(_: InterruptStackFrame) {
             crate::console::INPUT_BUFFER.force_push(b);
         }
     }
-    crate::apic::local::eoi();
 }
 
 #[allow(clippy::empty_loop)]
@@ -122,7 +122,7 @@ pub extern "x86-interrupt" fn handler6(f: InterruptStackFrame, c: u64) {
 }
 
 pub extern "x86-interrupt" fn handler7(_: InterruptStackFrame) {
+    crate::apic::local::eoi();
     let packet = unsafe { PortReadOnly::<u8>::new(0x60).read() };
     crate::mouse::handle(packet);
-    crate::apic::local::eoi();
 }

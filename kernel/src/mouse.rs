@@ -1,8 +1,7 @@
 use core::sync::atomic::{AtomicI16, AtomicU8, Ordering};
 
+use os_terminal::MouseInput;
 use x86_64::instructions::port::{PortReadOnly, PortWriteOnly};
-
-use crate::println;
 
 fn wait_write() {
     let mut port: PortReadOnly<u8> = PortReadOnly::new(0x64);
@@ -26,9 +25,7 @@ fn port_send(cmd: u8) {
 }
 
 pub fn port_read() -> u8 {
-    crate::println!("port_read() 1");
     wait_read();
-    crate::println!("port_read() 2");
     unsafe { PortReadOnly::new(0x60).read() }
 }
 
@@ -39,7 +36,7 @@ pub fn handle(packet: u8) {
     match CURRENT_PACKET.load(Ordering::Relaxed) {
         0 => {
             if (packet >> 3) & 1 == 1 {
-                println!("[DEBUG] mouse: raw flags = 0b{:08b}", packet);
+                // println!("[DEBUG] mouse: raw flags = 0b{:08b}", packet);
                 FLAGS.store(packet as i16, Ordering::Relaxed);
                 CURRENT_PACKET.store(1, Ordering::Relaxed);
             }
@@ -54,14 +51,26 @@ pub fn handle(packet: u8) {
         2 => {
             let flags = FLAGS.load(Ordering::Relaxed);
             let x = X.load(Ordering::Relaxed);
-            let y = packet as i16 - ((FLAGS.load(Ordering::Relaxed) << 3) & 0x100);
-            crate::println!(
-                "[DEBUG] mouse report x: {}, y: {}, middle button: {}, right button: {}, left button: {}",
-                x, y,
-                (flags >> 2) & 1,
-                (flags >> 1) & 1,
-                flags & 1
-            );
+            _ = x;
+            let y = packet as i16 - ((flags << 3) & 0x100);
+            // crate::println!(
+            //     "[DEBUG] mouse report x: {}, y: {}, middle button: {}, right button: {}, left button: {}",
+            //     x, y,
+            //     (flags >> 2) & 1,
+            //     (flags >> 1) & 1,
+            //     flags & 1
+            // );
+            if (flags >> 1) & 1 == 1 {
+                let mut terminal = crate::console::TERMINAL.lock();
+                terminal.handle_mouse(MouseInput::Scroll(y as isize));
+                let echo = crate::console::ECHO_FLAG.load(core::sync::atomic::Ordering::Relaxed);
+                while let Some(b) = crate::console::ECHO_BUFFER.pop() {
+                    if echo {
+                        terminal.process(&[b]);
+                    }
+                    crate::console::INPUT_BUFFER.force_push(b);
+                }
+            }
             CURRENT_PACKET.store(0, Ordering::Relaxed);
         }
         _ => unreachable!(),

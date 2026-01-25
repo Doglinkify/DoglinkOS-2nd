@@ -14,6 +14,7 @@ pub mod int;
 pub mod mm;
 pub mod mouse;
 pub mod pcie;
+pub mod power;
 pub mod rtc;
 pub mod sound;
 pub mod task;

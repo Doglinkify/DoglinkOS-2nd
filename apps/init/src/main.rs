@@ -130,7 +130,14 @@ fn shell_main_loop() {
                 sys_write(fd, "stop");
                 sys_close(fd);
             } else {
-                println!("error while opening /test.txt");
+                println!("error while opening /dev/pcspk");
+            }
+        } else if cmd == "poweroff" || cmd == "reboot" {
+            if let Some(fd) = sys_open("/dev/power", false) {
+                sys_write(fd, cmd);
+                sys_close(fd);
+            } else {
+                println!("error while opening /dev/power");
             }
         } else {
             let mut buf2 = [0u8; 128];

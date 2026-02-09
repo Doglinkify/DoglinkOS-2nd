@@ -171,6 +171,7 @@ dependencies = [
  "doglinked",
  "fatfs 0.3.6",
  "gpt",
+ "imgview",
  "infinite-loop",
  "ovmf-prebuilt",
  "tempfile",
@@ -478,6 +479,15 @@ name = "httparse"
 version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
+
+[[package]]
+name = "imgview"
+version = "0.1.0"
+dependencies = [
+ "dlos-app-rt",
+ "good_memory_allocator",
+ "zune-jpeg",
+]
 
 [[package]]
 name = "infinite-loop"
@@ -1203,3 +1213,18 @@ name = "zeroize"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ced3678a2879b30306d323f4542626697a464a97c0a07c9aebf7ebca65cd4dde"
+
+[[package]]
+name = "zune-core"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb8a0807f7c01457d0379ba880ba6322660448ddebc890ce29bb64da71fb40f9"
+
+[[package]]
+name = "zune-jpeg"
+version = "0.5.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "410e9ecef634c709e3831c2cfdb8d9c32164fae1c67496d5b68fff728eec37fe"
+dependencies = [
+ "zune-core",
+]

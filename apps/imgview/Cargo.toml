@@ -1,0 +1,11 @@
+[package]
+name = "imgview"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+zune-jpeg = { version = "0.5.12", default-features = false }
+good_memory_allocator = "0.1.7"
+
+[dependencies.dlos-app-rt]
+path = "../../app-rt"

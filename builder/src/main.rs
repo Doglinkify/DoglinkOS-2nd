@@ -66,12 +66,13 @@ fn main() {
                 "macos" => Some("coreaudio"),
                 "windows" => Some("dsound"),
                 _ => None,
-            } {
-                cmd.arg("-audiodev").arg(format!("{backend},id=sound"));
-                cmd.arg("-machine").arg("pcspk-audiodev=sound");
-                cmd.arg("-device").arg("intel-hda");
-                cmd.arg("-device").arg("hda-output,audiodev=sound");
             }
+        {
+            cmd.arg("-audiodev").arg(format!("{backend},id=sound"));
+            cmd.arg("-machine").arg("pcspk-audiodev=sound");
+            cmd.arg("-device").arg("intel-hda");
+            cmd.arg("-device").arg("hda-output,audiodev=sound");
+        }
 
         if args.nvme {
             cmd.arg("-device").arg("nvme,drive=disk1,serial=deadbeef");
@@ -103,6 +104,7 @@ fn main() {
 fn build_img() -> PathBuf {
     let doglinked_path = Path::new(env!("CARGO_BIN_FILE_DOGLINKED"));
     let t_path = Path::new(env!("CARGO_BIN_FILE_INFINITE_LOOP"));
+    let imgview_path = Path::new(env!("CARGO_BIN_FILE_IMGVIEW"));
 
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let assets_dir = manifest_dir.join("assets");
@@ -115,6 +117,7 @@ fn build_img() -> PathBuf {
         ("/bin/dins-hello", assets_dir.join("hello.elf")),
         ("/bin/pl_editor", assets_dir.join("pl_editor.elf")),
         ("/bin/lua", assets_dir.join("lua.elf")),
+        ("/bin/imgview", imgview_path.to_path_buf()),
     ]);
     let initrd_path = manifest_dir.parent().unwrap().join("initrd.img");
     FatBuilder::create(initrd_files, &initrd_path).expect("failed to build initrd.img");

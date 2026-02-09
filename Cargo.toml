@@ -1,4 +1,4 @@
 [workspace]
-members = ["builder", "kernel", "app-rt", "apps/init", "apps/infinite-loop"]
+members = ["builder", "kernel", "app-rt", "apps/init", "apps/infinite-loop", "apps/imgview"]
 resolver = "2"
 default-members = ["builder"]

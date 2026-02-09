@@ -1,0 +1,10 @@
+BOOTX64.EFI is copied from limine-bootloader/limine@v8.6.1-binary/BOOTX64.EFI
+empty.elf is compiled with dlos-gcc from Doglinkify/dins-libc@main/tests/empty.c
+hello.elf is compiled with dlos-gcc from Doglinkify/dins-libc@main/tests/hello.c
+hello_std.elf is compiled with dlos-rust from Doglinkify/apps-ext@main/hello_std/
+limine.conf is a source file
+lua.elf is compiled with dlos-gcc from official lua 5.4.8 source code
+pl_editor.elf is compiled with dlos-gcc from plos-clan/pl_editor@6286bb2
+
+dlos-gcc: Doglinkify/gcc-12.2.0@main, Doglinkify/binutils-gdb@doglinkos-2nd, Doglinkify/dins-libc@main
+dlos-rust: Doglinkify/rust

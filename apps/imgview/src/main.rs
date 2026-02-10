@@ -34,8 +34,30 @@ fn init_heap() {
     }
 }
 
+fn get_framebuffer() -> (*mut u8, usize, usize, usize) {
+    (
+        sys_info(8).unwrap() as *mut u8,
+        sys_info(6).unwrap(),
+        sys_info(7).unwrap(),
+        sys_info(9).unwrap(),
+    )
+}
+
 fn main() {
     let mut decoder = JpegDecoder::new(ZCursor::new(include_bytes!("test.jpg")));
     decoder.decode_headers().unwrap();
-    println!("image is {:?}", decoder.dimensions().unwrap());
+    let (width, height) = decoder.dimensions().unwrap();
+    let buf = decoder.decode().unwrap();
+    let (ptr, fb_width, fb_height, pitch) = get_framebuffer();
+    for i in 0..core::cmp::min(height, fb_height) {
+        for j in 0..core::cmp::min(width, fb_width) {
+            let base = (i * width + j) * 3;
+            unsafe {
+                *(ptr.add(i * pitch + j * 4) as *mut u32) = ((buf[base] as u32) << 16)
+                    + ((buf[base + 1] as u32) << 8)
+                    + (buf[base + 2] as u32)
+            }
+        }
+    }
+    _ = sys_read();
 }

@@ -1,6 +1,8 @@
 #![no_std]
 #![no_main]
 
+extern crate alloc;
+
 use dlos_app_rt::*;
 use good_memory_allocator::SpinLockedAllocator;
 use zune_jpeg::{JpegDecoder, zune_core::bytestream::ZCursor};
@@ -43,8 +45,36 @@ fn get_framebuffer() -> (*mut u8, usize, usize, usize) {
     )
 }
 
+fn read_file(path: &str) -> Option<alloc::vec::Vec<u8>> {
+    if let Some(fd) = sys_open(path, false) {
+        let size = sys_seek(fd, 0, 1);
+        sys_seek(fd, 0, 2);
+        let mut buf = alloc::vec![0u8; size];
+        sys_read2(fd, &mut buf);
+        sys_close(fd);
+        Some(buf)
+    } else {
+        None
+    }
+}
+
+fn read_line(buf: &mut [u8]) -> usize {
+    for (i, v) in buf.iter_mut().enumerate() {
+        match dlos_app_rt::sys_read() {
+            b'\n' => return i,
+            c => *v = c,
+        }
+    }
+    buf.len()
+}
+
 fn main() {
-    let mut decoder = JpegDecoder::new(ZCursor::new(include_bytes!("test.jpg")));
+    print!("Image file path: ");
+    let mut path_buf = [0; 128];
+    let len = read_line(&mut path_buf);
+    let path = &path_buf[0..len];
+    let file_content = read_file(core::str::from_utf8(path).unwrap()).unwrap();
+    let mut decoder = JpegDecoder::new(ZCursor::new(&file_content));
     decoder.decode_headers().unwrap();
     let (width, height) = decoder.dimensions().unwrap();
     let buf = decoder.decode().unwrap();

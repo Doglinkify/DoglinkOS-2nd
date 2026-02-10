@@ -6,6 +6,7 @@ extern crate alloc;
 use dlos_app_rt::*;
 use good_memory_allocator::SpinLockedAllocator;
 use zune_jpeg::{JpegDecoder, zune_core::bytestream::ZCursor};
+use zune_png::{PngDecoder, zune_core::result::DecodingResult};
 
 #[global_allocator]
 static ALLOCATOR: SpinLockedAllocator = SpinLockedAllocator::empty();
@@ -68,16 +69,40 @@ fn read_line(buf: &mut [u8]) -> usize {
     buf.len()
 }
 
+fn process_file(path: &[u8]) -> (alloc::vec::Vec<u8>, usize, usize) {
+    let path = core::str::from_utf8(path).unwrap();
+    let file_content = read_file(path).unwrap();
+    if path.ends_with(".jpg") || path.ends_with(".jpeg") {
+        let mut decoder = JpegDecoder::new(ZCursor::new(&file_content));
+        decoder.decode_headers().unwrap();
+        let (width, height) = decoder.dimensions().unwrap();
+        let buf = decoder.decode().unwrap();
+        (buf, width, height)
+    } else if path.ends_with(".png") {
+        let mut decoder = PngDecoder::new(ZCursor::new(&file_content));
+        decoder.decode_headers().unwrap();
+        let (width, height) = decoder.dimensions().unwrap();
+        let res = decoder.decode().unwrap();
+        match res {
+            DecodingResult::U8(data) => (data, width, height),
+            DecodingResult::U16(data) => {
+                (data.iter().map(|x| (x >> 8) as u8).collect(), width, height)
+            }
+            _ => unreachable!(),
+        }
+    } else if path.ends_with(".gif") {
+        (alloc::vec::Vec::new(), 0, 0)
+    } else {
+        (alloc::vec::Vec::new(), 0, 0)
+    }
+}
+
 fn main() {
     print!("Image file path: ");
     let mut path_buf = [0; 128];
     let len = read_line(&mut path_buf);
     let path = &path_buf[0..len];
-    let file_content = read_file(core::str::from_utf8(path).unwrap()).unwrap();
-    let mut decoder = JpegDecoder::new(ZCursor::new(&file_content));
-    decoder.decode_headers().unwrap();
-    let (width, height) = decoder.dimensions().unwrap();
-    let buf = decoder.decode().unwrap();
+    let (buf, width, height) = process_file(path);
     let (ptr, fb_width, fb_height, pitch) = get_framebuffer();
     for i in 0..core::cmp::min(height, fb_height) {
         for j in 0..core::cmp::min(width, fb_width) {

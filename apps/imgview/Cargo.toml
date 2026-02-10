@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 zune-jpeg = { version = "0.5.12", default-features = false }
+zune-png = { version = "0.5.1", default-features = false }
 good_memory_allocator = "0.1.7"
 
 [dependencies.dlos-app-rt]

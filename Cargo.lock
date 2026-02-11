@@ -488,6 +488,8 @@ dependencies = [
  "good_memory_allocator",
  "zune-jpeg",
  "zune-png",
+ "zune-ppm",
+ "zune-qoi",
 ]
 
 [[package]]
@@ -1253,4 +1255,22 @@ checksum = "af6dc406edc296451b9597ee98643df8606396066d8f0864682c266eda16f310"
 dependencies = [
  "zune-core",
  "zune-inflate",
+]
+
+[[package]]
+name = "zune-ppm"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fa3b8ca5bfe13b58735c3c8e56442390946e8e0e0ff50e12b9215afd278d422"
+dependencies = [
+ "zune-core",
+]
+
+[[package]]
+name = "zune-qoi"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cdfb703f475bc1190ebece625c1ddf162214933188a3572af8e8f697ad043d5a"
+dependencies = [
+ "zune-core",
 ]

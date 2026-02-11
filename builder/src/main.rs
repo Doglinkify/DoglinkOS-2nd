@@ -122,6 +122,8 @@ fn build_img() -> PathBuf {
         ("/res/test2.jpg", assets_dir.join("test2.jpg")),
         ("/res/test2.png", assets_dir.join("test2.png")),
         ("/res/test2_16.png", assets_dir.join("test2_16.png")),
+        ("/res/test2.ppm", assets_dir.join("test2.ppm")),
+        ("/res/test2.qoi", assets_dir.join("test2.qoi")),
     ]);
     let initrd_path = manifest_dir.parent().unwrap().join("initrd.img");
     FatBuilder::create(initrd_files, &initrd_path).expect("failed to build initrd.img");

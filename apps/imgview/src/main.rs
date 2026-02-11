@@ -7,6 +7,8 @@ use dlos_app_rt::*;
 use good_memory_allocator::SpinLockedAllocator;
 use zune_jpeg::{JpegDecoder, zune_core::bytestream::ZCursor};
 use zune_png::{PngDecoder, zune_core::result::DecodingResult};
+use zune_ppm::PPMDecoder;
+use zune_qoi::QoiDecoder;
 
 #[global_allocator]
 static ALLOCATOR: SpinLockedAllocator = SpinLockedAllocator::empty();
@@ -90,8 +92,24 @@ fn process_file(path: &[u8]) -> (alloc::vec::Vec<u8>, usize, usize) {
             }
             _ => unreachable!(),
         }
-    } else if path.ends_with(".gif") {
-        (alloc::vec::Vec::new(), 0, 0)
+    } else if path.ends_with(".ppm") {
+        let mut decoder = PPMDecoder::new(ZCursor::new(&file_content));
+        decoder.decode_headers().unwrap();
+        let (width, height) = decoder.dimensions().unwrap();
+        let res = decoder.decode().unwrap();
+        match res {
+            DecodingResult::U8(data) => (data, width, height),
+            DecodingResult::U16(data) => {
+                (data.iter().map(|x| (x >> 8) as u8).collect(), width, height)
+            }
+            _ => unreachable!(),
+        }
+    } else if path.ends_with(".qoi") {
+        let mut decoder = QoiDecoder::new(ZCursor::new(&file_content));
+        decoder.decode_headers().unwrap();
+        let (width, height) = decoder.dimensions().unwrap();
+        let res = decoder.decode().unwrap();
+        (res, width, height)
     } else {
         (alloc::vec::Vec::new(), 0, 0)
     }

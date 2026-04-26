@@ -75,6 +75,10 @@ fn shell_main_loop() {
                 let mut content = [0; 512];
                 sys_read2(fd, &mut content);
                 println!("{content:?}");
+                sys_seek(fd, 0, SEEK_SET);
+                sys_read2(fd, &mut content[..100]);
+                sys_read2(fd, &mut content[100..]);
+                println!("{content:?}");
                 sys_close(fd);
             } else {
                 println!("error while opening /dev/disk0");

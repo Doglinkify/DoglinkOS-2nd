@@ -17,6 +17,7 @@ pub mod identify;
 pub use driver::{Ahci, BLOCK_SIZE};
 pub use hba::HbaMemory;
 
+#[derive(Clone)]
 pub struct AhciBlockDevice {
     pub device: Arc<Mutex<Ahci>>,
     pub identify: IdentifyData,
@@ -34,12 +35,10 @@ impl fatfs::Read for AhciBlockDevice {
         let sector = self.cur_pos / BLOCK_SIZE;
         let mut buf2 = [0; BLOCK_SIZE];
         device.read_block(sector as u64, &mut buf2);
-        let (t1, t2) = match self.cur_pos % BLOCK_SIZE {
-            0 => (BLOCK_SIZE, 0),
-            o => (o, BLOCK_SIZE - o),
-        };
-        let will_read = core::cmp::min(size, t1);
-        buf[..will_read].copy_from_slice(&buf2[t2..(t2 + will_read)]);
+        let t1 = self.cur_pos % BLOCK_SIZE;
+        let will_read = core::cmp::min(size, BLOCK_SIZE - t1);
+        buf[..will_read].copy_from_slice(&buf2[t1..(t1 + will_read)]);
+        self.cur_pos += will_read;
         Ok(will_read)
     }
 }

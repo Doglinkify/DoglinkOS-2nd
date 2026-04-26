@@ -1,6 +1,8 @@
 mod devfs;
 mod fat;
 
+pub use fat::get_fs as get_fat_fs;
+
 use crate::blockdev::ramdisk::RamDisk;
 use crate::println;
 use alloc::borrow::ToOwned;

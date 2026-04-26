@@ -12,7 +12,7 @@ pub struct Identify {
     pub lba48_sectors: u64,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IdentifyData {
     pub serial_number: String,
     pub firmware_revision: String,

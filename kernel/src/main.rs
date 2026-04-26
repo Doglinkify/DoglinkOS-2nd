@@ -56,6 +56,7 @@ extern "C" fn kmain() -> ! {
     show_pcie_info();
     test_page_alloc();
     init_vfs();
+    DoglinkOS_2nd::blockdev::partition::test();
     init_sse();
     init_task();
     println!("[INFO] kmain: all things ok, let's start!");

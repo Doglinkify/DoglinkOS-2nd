@@ -3,7 +3,7 @@ use alloc::sync::Arc;
 use fatfs::{FileSystem, FsOptions, ReadWriteSeek};
 use spin::Mutex;
 
-pub(super) fn get_fs<T>(device: Option<T>) -> Arc<dyn VfsDirectory>
+pub fn get_fs<T>(device: Option<T>) -> Arc<dyn VfsDirectory>
 where
     T: fatfs::ReadWriteSeek + Send + 'static,
 {

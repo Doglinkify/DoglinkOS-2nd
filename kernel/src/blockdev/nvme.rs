@@ -68,13 +68,12 @@ impl fatfs::Read for NvmeBlockDevice {
         let buf2 =
             unsafe { alloc(Layout::from_size_align(block_size, block_size).map_err(|_| ())?) };
         qp.read(buf2, block_size, sector as u64).map_err(|_| ())?;
-        let (t1, t2) = match self.cur_pos % block_size {
-            0 => (block_size, 0),
-            o => (o, block_size - o),
-        };
-        let will_read = core::cmp::min(size, t1);
+        qp.flush().map_err(|_| ())?;
+        let t1 = self.cur_pos % block_size;
+        let will_read = core::cmp::min(size, block_size - t1);
         let buf2_slice = unsafe { core::slice::from_raw_parts(buf2, block_size) };
-        buf[..will_read].copy_from_slice(&buf2_slice[t2..(t2 + will_read)]);
+        buf[..will_read].copy_from_slice(&buf2_slice[t1..(t1 + will_read)]);
+        self.cur_pos += will_read;
         unsafe {
             dealloc(
                 buf2,

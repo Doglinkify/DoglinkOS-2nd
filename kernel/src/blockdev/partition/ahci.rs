@@ -123,7 +123,7 @@ impl fatfs::Seek for AhciPartition {
 }
 
 pub fn test() {
-    let block_device = crate::blockdev::ahci::AHCI.iter().nth(0).unwrap();
+    let block_device = crate::blockdev::ahci::AHCI.iter().next().unwrap();
     let partition = AhciPartition::new(block_device, 0);
     mount(Some(partition), "/mnt/", crate::vfs::get_fat_fs);
     let file = crate::vfs::get_file("/mnt/kernel").unwrap();

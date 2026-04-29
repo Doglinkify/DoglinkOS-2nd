@@ -95,7 +95,7 @@ impl NvmePartition {
         let block_size = block_device.namespace.block_size();
         let _ = fatfs::Seek::seek(
             &mut block_device,
-            SeekFrom::Start(partition_entry.starting_lba.to_u64() * (block_size as u64)),
+            SeekFrom::Start(partition_entry.starting_lba.to_u64() * block_size),
         );
         Self {
             block_device,
@@ -131,7 +131,7 @@ impl fatfs::Seek for NvmePartition {
             &mut self.block_device,
             match pos {
                 SeekFrom::Start(x) => SeekFrom::Start(
-                    self.partition_entry.starting_lba.to_u64() * (block_size as u64) + x,
+                    self.partition_entry.starting_lba.to_u64() * block_size + x,
                 ),
                 SeekFrom::End(x) => SeekFrom::End(
                     (self.partition_entry.ending_lba.to_u64() as i64 + 1) * (block_size as i64) + x,
@@ -144,11 +144,9 @@ impl fatfs::Seek for NvmePartition {
 
 pub fn test() {
     let block_device = crate::blockdev::nvme::NVME
-        .iter()
-        .nth(0)
+        .iter().next()
         .unwrap()
-        .into_iter()
-        .nth(0)
+        .into_iter().next()
         .unwrap();
     let partition = NvmePartition::new(block_device, 0);
     mount(Some(partition), "/mnt/", crate::vfs::get_fat_fs);

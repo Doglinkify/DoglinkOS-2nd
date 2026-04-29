@@ -261,8 +261,7 @@ pub fn sys_mount(args: &mut SyscallStackFrame) {
                 .iter()
                 .nth(args.rdx as usize)
                 .unwrap()
-                .into_iter()
-                .nth(0)
+                .into_iter().next()
                 .unwrap();
             let partition = NvmePartition::new(block_device, args.r9 as usize);
             mount(Some(partition), mountpoint, crate::vfs::get_fat_fs);

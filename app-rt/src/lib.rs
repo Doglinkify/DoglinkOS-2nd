@@ -194,6 +194,20 @@ pub fn sys_remove(name: &str) {
     }
 }
 
+pub fn sys_mount(typ: usize, disk: usize, part: usize, mountpoint: &str) {
+    unsafe {
+        core::arch::asm!(
+            "int 0x80",
+            in("rax") 17,
+            in("rdi") mountpoint.as_ptr(),
+            in("rcx") mountpoint.len(),
+            in("rsi") typ,
+            in("rdx") disk,
+            in("r9") part,
+        );
+    }
+}
+
 #[macro_export]
 macro_rules! print {
     ($($arg:tt)*) => ($crate::_print(format_args!($($arg)*)));

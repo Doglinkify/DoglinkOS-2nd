@@ -1,6 +1,9 @@
+use crate::blockdev::partition::ahci::AhciPartition;
+use crate::blockdev::partition::nvme::NvmePartition;
 use crate::println;
 use crate::task::process::ProcessContext as SyscallStackFrame;
 use crate::task::process::ORIGINAL_KERNEL_CR3;
+use crate::vfs::mount;
 use crate::vfs::SeekFrom;
 use core::arch::naked_asm;
 use core::sync::atomic::Ordering;
@@ -46,7 +49,7 @@ pub extern "x86-interrupt" fn syscall_handler(_: InterruptStackFrame) {
     )
 }
 
-const NUM_SYSCALLS: usize = 17;
+const NUM_SYSCALLS: usize = 18;
 
 const SYSCALL_TABLE: [fn(&mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_test,
@@ -66,6 +69,7 @@ const SYSCALL_TABLE: [fn(&mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_seek,
     sys_close,
     sys_remove,
+    sys_mount,
 ];
 
 unsafe extern "C" fn do_syscall(args: *mut SyscallStackFrame) {
@@ -238,4 +242,31 @@ pub fn sys_close(args: &mut SyscallStackFrame) {
 pub fn sys_remove(args: &mut SyscallStackFrame) {
     let path = unsafe { core::str::from_raw_parts(args.rdi as *const u8, args.rcx as usize) };
     crate::vfs::remove_file(path);
+}
+
+pub fn sys_mount(args: &mut SyscallStackFrame) {
+    let mountpoint = unsafe { core::str::from_raw_parts(args.rdi as *const u8, args.rcx as usize) };
+    match args.rsi {
+        0 => {
+            // 0 for AHCI
+            let block_device = crate::blockdev::ahci::AHCI
+                .iter()
+                .nth(args.rdx as usize)
+                .unwrap();
+            let partition = AhciPartition::new(block_device, args.r9 as usize);
+            mount(Some(partition), mountpoint, crate::vfs::get_fat_fs);
+        }
+        1 => {
+            let block_device = crate::blockdev::nvme::NVME
+                .iter()
+                .nth(args.rdx as usize)
+                .unwrap()
+                .into_iter()
+                .nth(0)
+                .unwrap();
+            let partition = NvmePartition::new(block_device, args.r9 as usize);
+            mount(Some(partition), mountpoint, crate::vfs::get_fat_fs);
+        }
+        _ => args.r10 = u64::MAX,
+    }
 }

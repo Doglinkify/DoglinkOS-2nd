@@ -58,18 +58,6 @@ fn shell_main_loop() {
             println!("{content}");
         } else if cmd == "clear" {
             print!("\x1b[H\x1b[2J\x1b[3J");
-        } else if cmd == "file-read" {
-            if let Some(fd) = sys_open("/test.txt", true) {
-                let size = sys_seek(fd, 0, SEEK_END);
-                println!("File /test.txt is {size} bytes");
-                sys_seek(fd, 0, SEEK_SET);
-                let mut content = [0; 512];
-                sys_read2(fd, &mut content);
-                println!("{:?}", &content[..size]);
-                sys_close(fd);
-            } else {
-                println!("error while opening /test.txt");
-            }
         } else if cmd == "disk-read" {
             if let Some(fd) = sys_open("/dev/disk0", false) {
                 let mut content = [0; 512];
@@ -121,12 +109,50 @@ fn shell_main_loop() {
             } else {
                 println!("error while opening /dev/initrd");
             }
-        } else if let Some(content) = cmd.strip_prefix("file-write ") {
-            if let Some(fd) = sys_open("/test.txt", true) {
-                sys_write(fd, content);
+        } else if let Some(file_name) = cmd.strip_prefix("file-read ") {
+            if let Some(fd) = sys_open(file_name, false) {
+                let mut remaining_size = sys_seek(fd, 0, SEEK_END);
+                sys_seek(fd, 0, SEEK_SET);
+                let mut buf = [0; 512];
+                while remaining_size > 0 {
+                    let will_read = core::cmp::min(remaining_size, 512);
+                    sys_read2(fd, &mut buf[..will_read]);
+                    sys_write(1, str::from_utf8(&buf[..will_read]).unwrap());
+                    remaining_size -= will_read;
+                }
                 sys_close(fd);
             } else {
-                println!("error while opening /test.txt");
+                println!("file {file_name} not found");
+            }
+        } else if let Some(file_name) = cmd.strip_prefix("file-write ") {
+            if let Some(fd) = sys_open(file_name, true) {
+                let mut line_buf = [0u8; 128];
+                while line_buf[0] != b'E' || line_buf[1] != b'O' || line_buf[2] != b'F' {
+                    let len = read_line(&mut line_buf);
+                    sys_write(fd, str::from_utf8(&line_buf[..len]).unwrap());
+                    sys_write(fd, "\n");
+                }
+                sys_close(fd);
+            } else {
+                println!("error while opening {file_name}");
+            }
+        } else if let Some(params) = cmd.strip_prefix("mount ") {
+            let mut it = params.split(' ');
+            let typs = it.next().unwrap();
+            let typ = if typs == "ahci" {
+                0
+            } else if typs == "nvme" {
+                1
+            } else {
+                continue;
+            };
+            let disk: usize = it.next().unwrap().parse().unwrap();
+            let part: usize = it.next().unwrap().parse().unwrap();
+            let mountpoint = it.next().unwrap();
+            if !mountpoint.ends_with('/') {
+                eprintln!("a mount point must end with /");
+            } else {
+                sys_mount(typ, disk, part, mountpoint);
             }
         } else if cmd.starts_with("file-rm") {
             sys_remove("/test.txt");

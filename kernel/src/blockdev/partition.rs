@@ -7,6 +7,7 @@ use gpt_disk_io::{
 use crate::{
     blockdev::ahci::{AhciBlockDevice, BLOCK_SIZE},
     println,
+    vfs::mount,
 };
 
 impl BlockIo for AhciBlockDevice {
@@ -124,10 +125,8 @@ impl fatfs::Seek for AhciPartition {
 pub fn test() {
     let block_device = crate::blockdev::ahci::AHCI.iter().nth(0).unwrap();
     let partition = AhciPartition::new(block_device, 0);
-    // mount(Some(partition), "/mnt", crate::vfs::get_fat_fs);
-    // let file = crate::vfs::get_file("/mnt/kernel").unwrap();
-    let fs = crate::vfs::get_fat_fs(Some(partition));
-    let file = fs.file("kernel").unwrap();
+    mount(Some(partition), "/mnt/", crate::vfs::get_fat_fs);
+    let file = crate::vfs::get_file("/mnt/kernel").unwrap();
     let mut buf = [0; 128];
     let mut file = file.lock();
     file.read_exact(&mut buf);

@@ -47,3 +47,7 @@ pub fn eoi() {
         (*LAPIC.lock()).as_mut().unwrap().end_of_interrupt();
     }
 }
+
+pub fn lapic_id() -> u32 {
+    unsafe { (*LAPIC.lock()).as_ref().unwrap().id() }
+}

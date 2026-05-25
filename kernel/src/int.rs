@@ -1,7 +1,6 @@
 use crate::println;
 use core::arch::naked_asm;
 use spin::Lazy;
-use x86_64::instructions::port::PortReadOnly;
 use x86_64::registers::control::Cr2;
 use x86_64::structures::idt::InterruptDescriptorTable;
 use x86_64::structures::idt::InterruptStackFrame;
@@ -79,18 +78,7 @@ pub extern "x86-interrupt" fn handler3(_: InterruptStackFrame) {
 
 pub extern "x86-interrupt" fn handler4(_: InterruptStackFrame) {
     crate::apic::local::eoi();
-    unsafe {
-        let scancode: u8 = x86_64::instructions::port::PortReadOnly::new(0x60).read();
-        let mut term = crate::console::TERMINAL.lock();
-        term.handle_keyboard(scancode);
-        let echo = crate::console::ECHO_FLAG.load(core::sync::atomic::Ordering::Relaxed);
-        while let Some(b) = crate::console::ECHO_BUFFER.pop() {
-            if echo {
-                term.process(&[b]);
-            }
-            crate::console::INPUT_BUFFER.force_push(b);
-        }
-    }
+    crate::inputdev::interrupt_handler();
 }
 
 #[allow(clippy::empty_loop)]
@@ -123,6 +111,5 @@ pub extern "x86-interrupt" fn handler6(f: InterruptStackFrame, c: u64) {
 
 pub extern "x86-interrupt" fn handler7(_: InterruptStackFrame) {
     crate::apic::local::eoi();
-    let packet = unsafe { PortReadOnly::<u8>::new(0x60).read() };
-    crate::mouse::handle(packet);
+    crate::inputdev::interrupt_handler();
 }

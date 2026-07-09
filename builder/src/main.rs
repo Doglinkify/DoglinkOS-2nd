@@ -25,6 +25,10 @@ struct Args {
     #[argh(description = "number of CPU cores")]
     cores: usize,
 
+    #[argh(option, short = 'm')]
+    #[argh(description = "guest memory size")]
+    memory: Option<String>,
+
     #[argh(switch, short = 'v')]
     #[argh(description = "use vnc")]
     vnc: bool,
@@ -56,7 +60,7 @@ fn main() {
 
         cmd.arg("-machine").arg("q35");
         cmd.arg("-drive").arg(ovmf_config);
-        cmd.arg("-m").arg("256m");
+        cmd.arg("-m").arg(args.memory.as_deref().unwrap_or("256m"));
         cmd.arg("-smp").arg(format!("cores={}", args.cores));
         cmd.arg("-cpu").arg("qemu64,+x2apic");
 
@@ -117,6 +121,7 @@ fn build_img() -> PathBuf {
         ("/bin/dins-hello", assets_dir.join("hello.elf")),
         ("/bin/pl_editor", assets_dir.join("pl_editor.elf")),
         ("/bin/lua", assets_dir.join("lua.elf")),
+        ("/bin/huge-alloc-test", assets_dir.join("huge_alloc.elf")),
         ("/bin/imgview", imgview_path.to_path_buf()),
         ("/res/test.jpg", assets_dir.join("test.jpg")),
         ("/res/test2.jpg", assets_dir.join("test2.jpg")),

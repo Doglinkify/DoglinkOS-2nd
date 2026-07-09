@@ -3,29 +3,51 @@ use core::sync::atomic::{AtomicI16, AtomicU8, Ordering};
 use os_terminal::MouseInput;
 use x86_64::instructions::port::{PortReadOnly, PortWriteOnly};
 
-fn wait_write() {
+use crate::dbg;
+
+#[derive(Debug)]
+enum Error {
+    Timeout,
+    TestFailed,
+}
+
+fn wait_write() -> Result<(), Error> {
     let mut port: PortReadOnly<u8> = PortReadOnly::new(0x64);
-    unsafe { while port.read() & 0x02 != 0 {} }
+    unsafe {
+        for _ in 0..1000000 {
+            if port.read() & 0x02 == 0 {
+                return Ok(());
+            }
+        }
+        Err(Error::Timeout)
+    }
 }
 
-fn wait_read() {
+fn wait_read() -> Result<(), Error> {
     let mut port: PortReadOnly<u8> = PortReadOnly::new(0x64);
-    unsafe { while port.read() & 0x01 == 0 {} }
+    unsafe {
+        for _ in 0..1000000 {
+            if port.read() & 0x01 == 1 {
+                return Ok(());
+            }
+        }
+        Err(Error::Timeout)
+    }
 }
 
-fn read_data() -> u8 {
-    wait_read();
-    unsafe { PortReadOnly::new(0x60).read() }
+fn read_data() -> Result<u8, Error> {
+    wait_read()?;
+    unsafe { Ok(PortReadOnly::new(0x60).read()) }
 }
 
-fn write_command(cmd: u8) {
-    wait_write();
-    unsafe { PortWriteOnly::new(0x64).write(cmd) }
+fn write_command(cmd: u8) -> Result<(), Error> {
+    wait_write()?;
+    unsafe { Ok(PortWriteOnly::new(0x64).write(cmd)) }
 }
 
-fn write_data(cmd: u8) {
-    wait_write();
-    unsafe { PortWriteOnly::new(0x60).write(cmd) }
+fn write_data(cmd: u8) -> Result<(), Error> {
+    wait_write()?;
+    unsafe { Ok(PortWriteOnly::new(0x60).write(cmd)) }
 }
 
 fn flush_output() {
@@ -40,35 +62,43 @@ fn flush_output() {
     }
 }
 
-fn read_config() -> u8 {
-    write_command(0x20); // read_config
+fn read_config() -> Result<u8, Error> {
+    write_command(0x20)?; // read_config
     read_data()
 }
 
-fn write_config(config: u8) {
-    write_command(0x60); // write_config
+fn write_config(config: u8) -> Result<(), Error> {
+    write_command(0x60)?; // write_config
     write_data(config)
 }
 
-fn send_to_port1(cmd: u8) {
+fn send_to_port1(cmd: u8) -> Result<(), Error> {
     for _ in 0..3 {
-        write_data(cmd);
-        let response = read_data();
+        write_data(cmd)?;
+        let response = read_data()?;
         if response == 0xfa {
-            break;
+            return Ok(());
+        }
+        if response != 0xfe {
+            return Err(Error::TestFailed);
         }
     }
+    Err(Error::Timeout)
 }
 
-fn send_to_port2(cmd: u8) {
+fn send_to_port2(cmd: u8) -> Result<(), Error> {
     for _ in 0..3 {
-        write_command(0xd4);
-        write_data(cmd);
-        let response = read_data();
+        write_command(0xd4)?;
+        write_data(cmd)?;
+        let response = read_data()?;
         if response == 0xfa {
-            break;
+            return Ok(());
+        }
+        if response != 0xfe {
+            return Err(Error::TestFailed);
         }
     }
+    Err(Error::Timeout)
 }
 
 pub fn handle_mouse(packet: u8) {
@@ -124,64 +154,125 @@ pub fn handle_mouse(packet: u8) {
 }
 
 pub fn init() {
-    init_controller();
-    init_keyboard();
-    init_mouse();
+    dbg!();
+    init_controller().unwrap();
+    dbg!();
+    init_keyboard().unwrap();
+    dbg!();
+    init_mouse().unwrap();
+    dbg!();
 }
 
-fn init_controller() {
-    write_command(0xad); // disable_port1
-    write_command(0xa7); // disable_port2
+fn init_controller() -> Result<(), Error> {
+    dbg!();
+    write_command(0xad)?; // disable_port1
+    dbg!();
+    write_command(0xa7)?; // disable_port2
+    dbg!();
     flush_output();
-    let config = read_config() & 0b10111100u8;
-    write_config(config);
-    write_command(0xaa); // test_controller
-    let response = read_data();
-    assert!(response == 0x55);
-    write_config(config);
-    write_command(0xa8); // enable_port2
-    let config2 = read_config();
-    assert!(config2 & 0x20 == 0);
-    write_command(0xa7); // disable_port2
-    write_command(0xab); // test_port1
-    let response2 = read_data();
-    assert!(response2 == 0);
-    write_command(0xa9); // test_port2
-    let response3 = read_data();
-    assert!(response3 == 0);
+    let config = read_config()? & 0b10111100u8;
+    dbg!();
+    write_config(config)?;
+    dbg!();
+    write_command(0xaa)?; // test_controller
+    dbg!();
+    let response = read_data()?;
+    dbg!();
+    if response != 0x55 {
+        return Err(Error::TestFailed);
+    }
+    dbg!();
+    write_config(config)?;
+    dbg!();
+    write_command(0xa8)?; // enable_port2
+    dbg!();
+    let config2 = read_config()?;
+    dbg!();
+    if config2 & 0x20 != 0 {
+        return Err(Error::TestFailed);
+    }
+    dbg!();
+    write_command(0xa7)?; // disable_port2
+    dbg!();
+    write_command(0xab)?; // test_port1
+    dbg!();
+    let response2 = read_data()?;
+    dbg!();
+    if response2 != 0 {
+        return Err(Error::TestFailed);
+    }
+    dbg!();
+    write_command(0xa9)?; // test_port2
+    dbg!();
+    let response3 = read_data()?;
+    dbg!();
+    if response3 != 0 {
+        return Err(Error::TestFailed);
+    }
+    dbg!();
+    Ok(())
 }
 
-fn init_keyboard() {
-    write_command(0xae); // enable_port1
+fn init_keyboard() -> Result<(), Error> {
+    dbg!();
+    write_command(0xae)?; // enable_port1
+    dbg!();
     flush_output();
-    send_to_port1(0xff); // dev_reset
-    let response = read_data();
-    assert!(response == 0xaa);
-    send_to_port1(0xf0);
-    send_to_port1(0x01);
-    send_to_port1(0xf4); // dev_enable
-    let mut config = read_config();
+    send_to_port1(0xff)?; // dev_reset
+    dbg!();
+    let response = read_data()?;
+    dbg!();
+    if response != 0xaa {
+        return Err(Error::TestFailed);
+    }
+    dbg!();
+    send_to_port1(0xf0)?;
+    dbg!();
+    send_to_port1(0x01)?;
+    dbg!();
+    send_to_port1(0xf4)?; // dev_enable
+    dbg!();
+    let mut config = read_config()?;
+    dbg!();
     config |= 1;
     config &= 0b10101111;
-    write_config(config);
+    write_config(config)?;
+    dbg!();
+    Ok(())
 }
 
-fn init_mouse() {
-    write_command(0xa8); // enable_port2
+fn init_mouse() -> Result<(), Error> {
+    dbg!();
+    write_command(0xa8)?; // enable_port2
+    dbg!();
     flush_output();
-    send_to_port2(0xff); // dev_reset
-    let response = read_data();
-    assert!(response == 0xaa);
-    let data = read_data();
-    assert!(data == 0);
-    send_to_port2(0xf4); // dev_enable
-    send_to_port2(0xf3); // set_sample_rate
-    send_to_port2(10);
-    send_to_port2(0xf2);
-    let mut config = read_config();
+    send_to_port2(0xff)?; // dev_reset
+    dbg!();
+    let response = read_data()?;
+    dbg!();
+    if response != 0xaa {
+        return Err(Error::TestFailed);
+    }
+    dbg!();
+    let data = read_data()?;
+    dbg!();
+    if data != 0 {
+        return Err(Error::TestFailed);
+    }
+    dbg!();
+    send_to_port2(0xf4)?; // dev_enable
+    dbg!();
+    send_to_port2(0xf3)?; // set_sample_rate
+    dbg!();
+    send_to_port2(10)?;
+    dbg!();
+    let mut config = read_config()?;
+    dbg!();
     config |= 0b00000011;
     config &= 0b10001111;
-    write_config(config);
+    write_config(config)?;
+    dbg!();
+    Ok(())
 }
 
 pub fn interrupt_handler() {

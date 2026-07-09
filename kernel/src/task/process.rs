@@ -322,7 +322,7 @@ pub fn do_exec(args: &mut ProcessContext) {
             }
             // crate::println!("[DEBUG] will set rip to 0x{:x}", new_elf.entry);
             args.rip = new_elf.entry;
-            args.rsp = 0x80000000 - 64;
+            args.rsp = (1 << 47) - 64;
         }
     }
     // returning from exec means something is wrong

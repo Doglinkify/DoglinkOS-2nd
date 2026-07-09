@@ -48,6 +48,13 @@ macro_rules! println {
     ($($arg:tt)*) => ($crate::print!("{}\n", format_args!($($arg)*)));
 }
 
+#[macro_export]
+macro_rules! dbg {
+    () => {
+        $crate::println!("[DEBUG] [{}:{}:{}]", file!(), line!(), column!());
+    };
+}
+
 pub fn _print(args: core::fmt::Arguments) {
     TERMINAL.lock().write_fmt(args).unwrap();
 }

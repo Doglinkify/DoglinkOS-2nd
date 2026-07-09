@@ -247,6 +247,8 @@ pub fn do_user_page_fault(ip: x86_64::VirtAddr, code: PageFaultErrorCode) {
 }
 
 fn within_stack_range(addr: x86_64::VirtAddr) -> bool {
+    const STACK_BEGIN: u64 = 1 << 47;
+    const STACK_END: u64 = STACK_BEGIN - (1 << 23);
     let ua = addr.as_u64();
-    (0x7fe00000..0x80000000).contains(&ua)
+    (STACK_END..STACK_BEGIN).contains(&ua)
 }

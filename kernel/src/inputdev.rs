@@ -40,12 +40,14 @@ fn read_data() -> Result<u8, Error> {
 
 fn write_command(cmd: u8) -> Result<(), Error> {
     wait_write()?;
-    unsafe { Ok(PortWriteOnly::new(0x64).write(cmd)) }
+    unsafe { PortWriteOnly::new(0x64).write(cmd);
+    Ok(()) }
 }
 
 fn write_data(cmd: u8) -> Result<(), Error> {
     wait_write()?;
-    unsafe { Ok(PortWriteOnly::new(0x60).write(cmd)) }
+    unsafe { PortWriteOnly::new(0x60).write(cmd);
+    Ok(()) }
 }
 
 fn flush_output() {

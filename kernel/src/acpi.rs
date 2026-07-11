@@ -3,6 +3,8 @@ use crate::println;
 use acpi::fadt::Fadt;
 use acpi::handler::AcpiHandler;
 use acpi::handler::PhysicalMapping;
+use acpi::madt::Madt;
+use acpi::madt::MadtEntry;
 use acpi::mcfg::PciConfigEntry;
 use acpi::platform::interrupt::InterruptModel;
 use acpi::AcpiTables;
@@ -127,11 +129,23 @@ pub static FADT: Lazy<Fadt> = Lazy::new(|| {
     *acpi.find_table::<Fadt>().unwrap().get()
 });
 
+fn print_madt(acpi: &AcpiTables<Handler>) {
+    let madt = acpi.find_table::<Madt>().unwrap();
+    for entry in madt.get().entries() {
+        if let MadtEntry::InterruptSourceOverride(iso) = entry {
+            println!("{iso:?}");
+        } else if let MadtEntry::IoApic(ioapic) = entry {
+            println!("{ioapic:?}");
+        }
+    }
+}
+
 pub fn parse_madt() -> u64 {
     println!("[INFO] acpi: parse_madt() called");
     let acpi =
         unsafe { AcpiTables::from_rsdp(Handler, *RSDP_PA - (phys_to_virt(0) as usize)).unwrap() };
     let res = acpi.platform_info().unwrap().interrupt_model;
+    print_madt(&acpi);
     if let InterruptModel::Apic(apic) = res {
         let ioapic = apic.io_apics[0].address;
         println!("[INFO] acpi: parse_madt() returned");

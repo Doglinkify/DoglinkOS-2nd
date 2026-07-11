@@ -30,3 +30,6 @@ nvme = { git = "https://github.com/plos-clan/nvme-rs", rev = "04c5a8f067def0df81
 aml = "0.16.4"
 paste = "1.0.15"
 gpt_disk_io = "0.16.2"
+
+[features]
+ps2_poll = []

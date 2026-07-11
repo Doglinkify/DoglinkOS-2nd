@@ -48,7 +48,9 @@ extern "C" fn kmain() -> ! {
     reset_gdt();
     init_interrupt();
     init_lapic();
-    init_ioapic(parse_madt());
+    let lapic_id = DoglinkOS_2nd::apic::local::lapic_id() as u8;
+    println!("[DEBUG] kmain: local apic id is {lapic_id}");
+    init_ioapic(parse_madt(), lapic_id);
     init_inputdev();
     init_ahci();
     init_nvme();
@@ -56,10 +58,6 @@ extern "C" fn kmain() -> ! {
     show_pcie_info();
     test_page_alloc();
     init_vfs();
-    println!(
-        "[DEBUG] kmain: local apic id is {}",
-        DoglinkOS_2nd::apic::local::lapic_id()
-    );
     init_sse();
     init_task();
     println!("[INFO] kmain: all things ok, let's start!");
@@ -79,7 +77,20 @@ extern "C" fn kmain() -> ! {
             );
             unreachable!();
         } else {
-            hang();
+            asm!(
+                "int 0x80",
+                in("rax") 11, // sys_info
+                in("rdi") 10, // back to ring 0
+                out("rcx") _,
+            );
+            #[cfg(not(feature = "ps2_poll"))]
+            {
+                hang();
+            }
+            #[cfg(feature = "ps2_poll")]
+            loop {
+                DoglinkOS_2nd::inputdev::poll_once();
+            }
         }
     }
 }

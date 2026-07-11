@@ -12,8 +12,11 @@ pub static IDT: Lazy<InterruptDescriptorTable> = Lazy::new(|| {
     temp[32].set_handler_fn(handler1);
     temp[33].set_handler_fn(handler2);
     temp[34].set_handler_fn(handler3);
-    temp[36].set_handler_fn(handler4);
-    temp[47].set_handler_fn(handler7);
+    #[cfg(not(feature = "ps2_poll"))]
+    {
+        temp[36].set_handler_fn(handler4);
+        temp[47].set_handler_fn(handler7);
+    }
     temp[0x80]
         .set_handler_fn(crate::task::syscall::syscall_handler)
         .set_privilege_level(PrivilegeLevel::Ring3);
@@ -76,9 +79,10 @@ pub extern "x86-interrupt" fn handler3(_: InterruptStackFrame) {
     println!("spurious interrupt");
 }
 
+#[cfg(not(feature = "ps2_poll"))]
 pub extern "x86-interrupt" fn handler4(_: InterruptStackFrame) {
-    crate::apic::local::eoi();
     crate::inputdev::interrupt_handler();
+    crate::apic::local::eoi();
 }
 
 #[allow(clippy::empty_loop)]
@@ -109,7 +113,8 @@ pub extern "x86-interrupt" fn handler6(f: InterruptStackFrame, c: u64) {
     loop {}
 }
 
+#[cfg(not(feature = "ps2_poll"))]
 pub extern "x86-interrupt" fn handler7(_: InterruptStackFrame) {
-    crate::apic::local::eoi();
     crate::inputdev::interrupt_handler();
+    crate::apic::local::eoi();
 }

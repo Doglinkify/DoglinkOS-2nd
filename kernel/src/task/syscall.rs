@@ -7,6 +7,7 @@ use crate::vfs::mount;
 use crate::vfs::SeekFrom;
 use core::arch::naked_asm;
 use core::sync::atomic::Ordering;
+use x86_64::structures::gdt::SegmentSelector;
 use x86_64::structures::idt::InterruptStackFrame;
 
 #[unsafe(naked)]
@@ -176,6 +177,17 @@ pub fn sys_info(args: &mut SyscallStackFrame) {
         7 => crate::console::FRAMEBUFFER.height as u64,
         8 => crate::console::FRAMEBUFFER.addr as u64,
         9 => crate::console::FRAMEBUFFER.pitch as u64,
+        10 => {
+            let pid = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed) as u64;
+            if pid == 0 {
+                // only PID 0 is allowed to get back to ring 0
+                args.cs = SegmentSelector::new(1, x86_64::PrivilegeLevel::Ring0).0 as u64;
+                args.ss = SegmentSelector::new(2, x86_64::PrivilegeLevel::Ring0).0 as u64;
+                0
+            } else {
+                u64::MAX
+            }
+        }
         _ => u64::MAX,
     };
 }
@@ -261,7 +273,8 @@ pub fn sys_mount(args: &mut SyscallStackFrame) {
                 .iter()
                 .nth(args.rdx as usize)
                 .unwrap()
-                .into_iter().next()
+                .into_iter()
+                .next()
                 .unwrap();
             let partition = NvmePartition::new(block_device, args.r9 as usize);
             mount(Some(partition), mountpoint, crate::vfs::get_fat_fs);

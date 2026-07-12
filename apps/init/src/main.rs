@@ -24,6 +24,43 @@ fn read_line(buf: &mut [u8]) -> usize {
     buf.len()
 }
 
+fn print_help() {
+    println!("Builtin commands:");
+    println!("  help               Show this help text");
+    println!("  panic-test         Trigger a panic for testing");
+    println!("  exit               Exit the shell");
+    println!("  sysinfo            Show system information");
+    println!("  echo <text>        Print text");
+    println!("  clear              Clear the screen");
+    println!("  disk-read          Read from /dev/disk0");
+    println!("  nvme-read          Read from /dev/nvme0-0");
+    println!("  disk-size          Show /dev/disk0 size");
+    println!("  nvme-size          Show /dev/nvme0-0 size");
+    println!("  initrd-read        Read from /dev/initrd");
+    println!("  file-read <path>   Print file contents");
+    println!("  file-write <path>  Write lines to a file until EOF");
+    println!("  mount <args>       Mount a filesystem");
+    println!("  file-rm            Remove /test.txt");
+    println!("  beep <freq>        Play a beep");
+    println!("  poweroff           Power off the machine");
+    println!("  reboot             Reboot the machine");
+    println!();
+    println!("External commands:");
+    println!("  /bin/<name>        Execute a command from /bin");
+    println!("  exiter             Do nothing");
+    println!("  hello-std          A Rust std program that does not work properly");
+    println!("  dins-empty         Do nothing");
+    println!("  dins-hello         Print \"Hello, World!\"");
+    println!("  pl_editor          An editor that can easily port to any OSes");
+    println!(
+        "  lua                A powerful, efficient, lightweight, embeddable scripting language"
+    );
+    println!("  huge-alloc-test    Memory allocation tester (requires at least 5 GiB of memory)");
+    println!(
+        "  imgview            Draw an image on the framebuffer (can mess up the terminal and become hard to clear)"
+    );
+}
+
 fn shell_main_loop() {
     let mut buf = [0u8; 128];
     loop {
@@ -32,8 +69,9 @@ fn shell_main_loop() {
         let cmd = str::from_utf8(&buf[..len]).unwrap();
         if cmd.is_empty() {
             continue;
-        }
-        if cmd == "panic-test" {
+        } else if cmd == "help" {
+            print_help();
+        } else if cmd == "panic-test" {
             panic!("panic test");
         } else if cmd == "exit" {
             break;
@@ -175,11 +213,18 @@ fn shell_main_loop() {
             }
         } else {
             let mut buf2 = [0u8; 128];
-            buf2[0..5].copy_from_slice(b"/bin/");
-            buf2[5..(5 + len)].copy_from_slice(&buf[..len]);
+            let len2;
+            if buf[0] != b'/' {
+                buf2[0..5].copy_from_slice(b"/bin/");
+                buf2[5..(5 + len)].copy_from_slice(&buf[..len]);
+                len2 = len + 5;
+            } else {
+                buf2[..len].copy_from_slice(&buf[..len]);
+                len2 = len;
+            }
             let fork_result = sys_fork();
             if fork_result == 0 {
-                sys_exec(unsafe { core::str::from_utf8_unchecked(&buf2[..(len + 5)]) });
+                sys_exec(unsafe { core::str::from_utf8_unchecked(&buf2[..len2]) });
                 eprintln!("unknown command");
                 sys_exit();
             } else {

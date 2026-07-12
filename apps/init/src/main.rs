@@ -76,8 +76,8 @@ fn shell_main_loop() {
         } else if cmd == "exit" {
             break;
         } else if cmd == "sysinfo" {
-            println!("DoglinkOS-2nd version 1.3");
-            println!("DoglinkOS Shell version 1.3");
+            println!("DoglinkOS-2nd version 1.4");
+            println!("DoglinkOS Shell version 1.4");
             println!("In user mode");
             println!(
                 "Console: {} rows, {} cols",
@@ -235,7 +235,7 @@ fn shell_main_loop() {
 
 #[unsafe(no_mangle)]
 extern "C" fn _start() -> ! {
-    sys_write(0, "\n\nDoglinkOS Shell v1.3\n");
+    sys_write(0, "\n\nDoglinkOS Shell v1.4\n");
     shell_main_loop();
     if sys_fork() == 0 {
         // child

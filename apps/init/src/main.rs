@@ -213,15 +213,14 @@ fn shell_main_loop() {
             }
         } else {
             let mut buf2 = [0u8; 128];
-            let len2;
-            if buf[0] != b'/' {
+            let len2 = if buf[0] != b'/' {
                 buf2[0..5].copy_from_slice(b"/bin/");
                 buf2[5..(5 + len)].copy_from_slice(&buf[..len]);
-                len2 = len + 5;
+                len + 5
             } else {
                 buf2[..len].copy_from_slice(&buf[..len]);
-                len2 = len;
-            }
+                len
+            };
             let fork_result = sys_fork();
             if fork_result == 0 {
                 sys_exec(unsafe { core::str::from_utf8_unchecked(&buf2[..len2]) });

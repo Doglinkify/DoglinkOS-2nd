@@ -25,7 +25,7 @@ impl VfsFile for StdoutDevice {
     }
 
     fn write(&mut self, buf: &[u8]) -> usize {
-        crate::console::TERMINAL.lock().process(buf);
+        crate::console::write(buf);
         buf.len()
     }
 
@@ -46,10 +46,9 @@ impl VfsFile for StderrDevice {
     }
 
     fn write(&mut self, buf: &[u8]) -> usize {
-        let mut terminal = crate::console::TERMINAL.lock();
-        terminal.process(b"\x1b[31m");
-        terminal.process(buf);
-        terminal.process(b"\x1b[0m");
+        crate::console::write(b"\x1b[31m");
+        crate::console::write(buf);
+        crate::console::write(b"\x1b[0m");
         buf.len()
     }
 

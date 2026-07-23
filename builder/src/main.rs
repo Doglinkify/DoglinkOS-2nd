@@ -49,6 +49,10 @@ struct Args {
     #[argh(default = "0")]
     #[argh(description = "PS/2 special cases")]
     ps2_special: usize,
+
+    #[argh(switch, short = 'S')]
+    #[argh(description = "enable stdio serial")]
+    serial: bool,
 }
 
 fn main() {
@@ -121,6 +125,9 @@ fn main() {
                     .arg("usb-mouse")
             }
             _ => {}
+        }
+        if args.serial {
+            cmd.arg("-serial").arg("stdio");
         }
 
         let mut child = cmd.spawn().unwrap();

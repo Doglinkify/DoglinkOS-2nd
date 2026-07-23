@@ -1,5 +1,6 @@
 use crate::blockdev::partition::ahci::AhciPartition;
 use crate::blockdev::partition::nvme::NvmePartition;
+use crate::console::serial;
 use crate::println;
 use crate::task::process::ProcessContext as SyscallStackFrame;
 use crate::task::process::ORIGINAL_KERNEL_CR3;
@@ -121,7 +122,9 @@ pub fn sys_exit(args: &mut SyscallStackFrame) {
 }
 
 pub fn sys_read(args: &mut SyscallStackFrame) {
-    let res = crate::console::INPUT_BUFFER.pop().unwrap_or(0xff);
+    let res = crate::console::INPUT_BUFFER
+        .pop()
+        .unwrap_or(serial::read().unwrap_or(0xff));
     args.rcx = res as u64;
 }
 

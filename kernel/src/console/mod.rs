@@ -1,4 +1,5 @@
 mod framebuffer;
+pub mod serial;
 
 use alloc::boxed::Box;
 use core::fmt::Write;
@@ -35,6 +36,7 @@ pub static ECHO_FLAG: AtomicBool = AtomicBool::new(true);
 
 pub fn init() {
     Lazy::force(&TERMINAL);
+    serial::init();
 }
 
 #[macro_export]
@@ -57,4 +59,14 @@ macro_rules! dbg {
 
 pub fn _print(args: core::fmt::Arguments) {
     TERMINAL.lock().write_fmt(args).unwrap();
+    if serial::SERIAL_OK.load(core::sync::atomic::Ordering::Relaxed) {
+        serial::Serial.write_fmt(args).unwrap();
+    }
+}
+
+pub fn write(buf: &[u8]) {
+    TERMINAL.lock().process(buf);
+    if serial::SERIAL_OK.load(core::sync::atomic::Ordering::Relaxed) {
+        serial::write_bytes(buf);
+    }
 }

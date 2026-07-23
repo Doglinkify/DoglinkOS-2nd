@@ -3,6 +3,8 @@ use core::sync::atomic::{AtomicI16, AtomicU8, Ordering};
 use os_terminal::MouseInput;
 use x86_64::instructions::port::{PortReadOnly, PortWriteOnly};
 
+use crate::console::serial;
+
 #[derive(Debug)]
 enum Error {
     Timeout,
@@ -146,6 +148,7 @@ pub fn handle_mouse(packet: u8) {
                 let echo = crate::console::ECHO_FLAG.load(core::sync::atomic::Ordering::Relaxed);
                 while let Some(b) = crate::console::ECHO_BUFFER.pop() {
                     if echo {
+                        serial::write(b);
                         terminal.process(&[b]);
                     }
                     crate::console::INPUT_BUFFER.force_push(b);
@@ -249,6 +252,7 @@ fn handle_status_data(status: u8, data: u8) {
         let echo = crate::console::ECHO_FLAG.load(core::sync::atomic::Ordering::Relaxed);
         while let Some(b) = crate::console::ECHO_BUFFER.pop() {
             if echo {
+                serial::write(b);
                 term.process(&[b]);
             }
             crate::console::INPUT_BUFFER.force_push(b);

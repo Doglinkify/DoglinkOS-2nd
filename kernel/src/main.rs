@@ -8,7 +8,7 @@ use DoglinkOS_2nd::acpi::parse_madt;
 use DoglinkOS_2nd::apic::{io::init as init_ioapic, local::init as init_lapic};
 use DoglinkOS_2nd::blockdev::ahci::init as init_ahci;
 use DoglinkOS_2nd::blockdev::nvme::init as init_nvme;
-use DoglinkOS_2nd::console::init as init_terminal;
+use DoglinkOS_2nd::console::init as init_console;
 use DoglinkOS_2nd::cpu::show_cpu_info;
 use DoglinkOS_2nd::inputdev::init as init_inputdev;
 use DoglinkOS_2nd::int::init as init_interrupt;
@@ -36,7 +36,7 @@ static _END_MARKER: RequestsEndMarker = RequestsEndMarker::new();
 extern "C" fn kmain() -> ! {
     assert!(BASE_REVISION.is_supported());
     init_mm();
-    init_terminal();
+    init_console();
     println!(
         r"  ____                   _   _           _       ___    ____            ____                _
 |  _ \    ___     __ _  | | (_)  _ __   | | __  / _ \  / ___|          |___ \   _ __     __| |
@@ -60,7 +60,7 @@ extern "C" fn kmain() -> ! {
     init_vfs();
     init_sse();
     init_task();
-    println!("[INFO] kmain: all things ok, let's start!");
+    // println!("[INFO] kmain: all things ok, let's start!");
     let fork_result: u64;
     unsafe {
         asm!(

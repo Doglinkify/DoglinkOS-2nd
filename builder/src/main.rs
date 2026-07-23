@@ -44,6 +44,11 @@ struct Args {
     #[argh(switch, short = 's')]
     #[argh(description = "enable sound card")]
     sound: bool,
+
+    #[argh(option)]
+    #[argh(default = "0")]
+    #[argh(description = "PS/2 special cases")]
+    ps2_special: usize,
 }
 
 fn main() {
@@ -98,6 +103,24 @@ fn main() {
         }
         if args.debug {
             cmd.arg("-s").arg("-S");
+        }
+        match args.ps2_special {
+            1 => _ = cmd.arg("-machine").arg("i8042=off"),
+            2 => {
+                _ = cmd
+                    .arg("-device")
+                    .arg("qemu-xhci,id=xhci")
+                    .arg("-device")
+                    .arg("usb-kbd")
+            }
+            3 => {
+                _ = cmd
+                    .arg("-device")
+                    .arg("qemu-xhci,id=xhci")
+                    .arg("-device")
+                    .arg("usb-mouse")
+            }
+            _ => {}
         }
 
         let mut child = cmd.spawn().unwrap();

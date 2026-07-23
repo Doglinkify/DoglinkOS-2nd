@@ -158,16 +158,23 @@ pub fn handle_mouse(packet: u8) {
 }
 
 pub fn init() {
-    init_controller().unwrap();
-    init_keyboard().unwrap();
-    init_mouse().unwrap();
+    if let Err(e) = init_controller() {
+        crate::println!("[WARN] inputdev: PS/2 controller initialization failed ({e:?})");
+        return;
+    }
+    if let Err(e) = init_keyboard() {
+        crate::println!("[WARN] inputdev: PS/2 keyboard initialization failed ({e:?})");
+    }
+    if let Err(e) = init_mouse() {
+        crate::println!("[WARN] inputdev: PS/2 mouse initialization failed ({e:?})");
+    }
 }
 
 fn init_controller() -> Result<(), Error> {
     write_command(0xad)?; // disable_port1
     write_command(0xa7)?; // disable_port2
     flush_output();
-    let config = read_config()? & 0b10111100u8;
+    let config = read_config()? & 0b11111100u8;
     write_config(config)?;
     write_command(0xaa)?; // test_controller
     let response = read_data()?;
@@ -202,12 +209,10 @@ fn init_keyboard() -> Result<(), Error> {
     if response != 0xaa {
         return Err(Error::TestFailed);
     }
-    send_to_port1(0xf0)?;
-    send_to_port1(0x01)?;
     send_to_port1(0xf4)?; // dev_enable
     let mut config = read_config()?;
     config |= 1;
-    config &= 0b10101111;
+    config &= 0b11101111;
     write_config(config)?;
     Ok(())
 }
@@ -229,7 +234,7 @@ fn init_mouse() -> Result<(), Error> {
     send_to_port2(10)?;
     let mut config = read_config()?;
     config |= 0b00000011;
-    config &= 0b10001111;
+    config &= 0b11001111;
     write_config(config)?;
     Ok(())
 }

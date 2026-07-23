@@ -24,14 +24,14 @@ pub(super) fn init() {
     unsafe {
         outb(PORT + 1, 0x00); // Disable all interrupts
         outb(PORT + 3, 0x80); // Enable DLAB (set baud rate divisor)
-        outb(PORT + 0, 0x01); // Set divisor to 1 (lo byte) 115200 baud
+        outb(PORT, 0x01); // Set divisor to 1 (lo byte) 115200 baud
         outb(PORT + 1, 0x00); //                  (hi byte)
         outb(PORT + 3, 0x03); // 8 bits, no parity, one stop bit
         outb(PORT + 2, 0xC7); // Enable FIFO, clear them, with 14-byte threshold
         outb(PORT + 4, 0x0B); // IRQs enabled, RTS/DSR set
         outb(PORT + 4, 0x1E); // Set in loopback mode, test the serial chip
-        outb(PORT + 0, 0xAE); // Test serial chip (send byte 0xAE and check if serial returns same byte)
-        if inb(PORT + 0) != 0xAE {
+        outb(PORT, 0xAE); // Test serial chip (send byte 0xAE and check if serial returns same byte)
+        if inb(PORT) != 0xAE {
             return;
         }
         outb(PORT + 4, 0x0F);

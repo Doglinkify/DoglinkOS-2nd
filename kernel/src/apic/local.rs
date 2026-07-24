@@ -4,7 +4,12 @@ use crate::rtc::{perform_sleep as rtc_perform_sleep, prepare_sleep as rtc_prepar
 use spin::Mutex;
 use x2apic::lapic::{xapic_base, LocalApic, LocalApicBuilder, TimerDivide, TimerMode};
 
-static LAPIC: Mutex<Option<LocalApic>> = Mutex::new(None);
+struct WrappedLocalApic(LocalApic);
+
+unsafe impl Send for WrappedLocalApic {}
+unsafe impl Sync for WrappedLocalApic {}
+
+static LAPIC: Mutex<Option<WrappedLocalApic>> = Mutex::new(None);
 
 fn disable_pic() {
     unsafe {
@@ -37,17 +42,17 @@ pub fn init() {
         println!("[INFO] lapic: timer initial is {count}");
         lapic.enable_timer();
         lapic.set_timer_initial(count);
-        *LAPIC.lock() = Some(lapic);
+        *LAPIC.lock() = Some(WrappedLocalApic(lapic));
     }
     println!("[INFO] lapic: it didn't crash!");
 }
 
 pub fn eoi() {
     unsafe {
-        (*LAPIC.lock()).as_mut().unwrap().end_of_interrupt();
+        (*LAPIC.lock()).as_mut().unwrap().0.end_of_interrupt();
     }
 }
 
 pub fn lapic_id() -> u32 {
-    unsafe { (*LAPIC.lock()).as_ref().unwrap().id() }
+    unsafe { (*LAPIC.lock()).as_ref().unwrap().0.id() }
 }

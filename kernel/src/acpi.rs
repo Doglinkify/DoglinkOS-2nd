@@ -107,7 +107,7 @@ impl aml::Handler for Handler {
     }
 }
 
-pub static RSDP_PA: Lazy<usize> = Lazy::new(|| RSDP_REQUEST.get_response().unwrap().address());
+pub static RSDP_PA: Lazy<usize> = Lazy::new(|| RSDP_REQUEST.response().unwrap().address as usize);
 pub static AML_CONTEXT: Lazy<Mutex<AmlContext>> = Lazy::new(|| {
     let acpi =
         unsafe { AcpiTables::from_rsdp(Handler, *RSDP_PA - (phys_to_virt(0) as usize)).unwrap() };

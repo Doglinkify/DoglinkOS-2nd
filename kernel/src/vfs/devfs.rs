@@ -133,9 +133,13 @@ impl VfsDirectory for DevFileSystem {
                 v[namespace].clone()
             })))
         } else if path == "/initrd" {
-            let file = super::MODULE_REQUEST.get_response().unwrap().modules()[0];
+            let file = super::MODULE_REQUEST.response().unwrap().modules()[0];
+            let data = file.data();
             Ok(Arc::new(Mutex::new(
-                crate::blockdev::ramdisk::RamDisk::with_addr_and_size(file.addr(), file.size()),
+                crate::blockdev::ramdisk::RamDisk::with_addr_and_size(
+                    data.as_ptr() as *mut u8,
+                    data.len() as u64,
+                ),
             )))
         } else if path == "/stdout" {
             Ok(Arc::new(Mutex::new(StdoutDevice)))

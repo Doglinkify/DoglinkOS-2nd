@@ -2,8 +2,8 @@
 #![no_main]
 
 use core::arch::asm;
-use limine::request::{RequestsEndMarker, RequestsStartMarker};
 use limine::BaseRevision;
+use limine::{RequestsEndMarker, RequestsStartMarker};
 use DoglinkOS_2nd::acpi::parse_madt;
 use DoglinkOS_2nd::apic::{io::init as init_ioapic, local::init as init_lapic};
 use DoglinkOS_2nd::blockdev::ahci::init as init_ahci;

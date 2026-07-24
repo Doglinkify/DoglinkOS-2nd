@@ -1,4 +1,4 @@
-BOOTX64.EFI is copied from limine-bootloader/limine@v8.6.1-binary/BOOTX64.EFI
+BOOTX64.EFI is copied from limine-bootloader/limine release 12.5.2
 empty.elf is compiled with dlos-gcc from Doglinkify/dins-libc@main/tests/empty.c
 hello.elf is compiled with dlos-gcc from Doglinkify/dins-libc@main/tests/hello.c
 hello_std.elf is compiled with dlos-rust from Doglinkify/apps-ext@main/hello_std/

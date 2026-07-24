@@ -16,9 +16,9 @@ static ALLOCATOR: SpinLockedAllocator = SpinLockedAllocator::empty();
 pub static OFFSET: Mutex<u64> = Mutex::new(0);
 
 pub fn init() {
-    let res = HHDM_REQUEST.get_response().unwrap();
+    let res = HHDM_REQUEST.response().unwrap();
     {
-        *OFFSET.lock() = res.offset();
+        *OFFSET.lock() = res.offset;
     }
     self::page_alloc::init();
     let heap_start_address = phys_to_virt(self::page_alloc::find_continuous_mem(2048));

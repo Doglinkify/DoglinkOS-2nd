@@ -9,14 +9,14 @@ use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use limine::modules::InternalModule;
-use limine::request::ModuleRequest;
+use limine::module::InternalModule;
+use limine::request::ModulesRequest;
 use spin::{Lazy, Mutex};
 
 #[used]
 #[link_section = ".requests"]
-static MODULE_REQUEST: ModuleRequest =
-    ModuleRequest::new().with_internal_modules(&[&InternalModule::new().with_path(c"/initrd.img")]);
+static MODULE_REQUEST: ModulesRequest =
+    ModulesRequest::new_rev1(&[&InternalModule::new(c"/initrd.img", c"initrd", 0)]);
 
 static MOUNT_TABLE: Lazy<Vec<(String, Arc<dyn VfsDirectory + 'static>)>> = Lazy::new(Vec::new);
 
@@ -58,13 +58,14 @@ pub enum SeekFrom {
 }
 
 pub fn init() {
-    let file = MODULE_REQUEST.get_response().unwrap().modules()[0];
+    let file = MODULE_REQUEST.response().unwrap().modules()[0];
+    let data = file.data();
     println!(
         "[DEBUG] vfs: initrd@{:?} has size {}",
-        file.addr(),
-        file.size()
+        data.as_ptr(),
+        data.len()
     );
-    let disk = RamDisk::with_addr_and_size(file.addr(), file.size());
+    let disk = RamDisk::with_addr_and_size(data.as_ptr() as *mut u8, data.len() as u64);
     Lazy::force(&MOUNT_TABLE);
     mount(Some(disk), "/", self::fat::get_fs);
     mount(None::<RamDisk>, "/dev/", self::devfs::get_fs);

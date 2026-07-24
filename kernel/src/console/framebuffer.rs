@@ -26,10 +26,10 @@ impl FrameBuffer {
 
     pub fn from_limine(fb: &LimineFrameBuffer) -> FrameBuffer {
         FrameBuffer {
-            width: fb.width() as usize,
-            height: fb.height() as usize,
-            addr: fb.addr() as usize,
-            pitch: fb.pitch() as usize,
+            width: fb.width as usize,
+            height: fb.height as usize,
+            addr: fb.address() as usize,
+            pitch: fb.pitch as usize,
         }
     }
 }

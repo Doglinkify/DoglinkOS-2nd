@@ -10,14 +10,13 @@ use os_terminal::{font::BitmapFont, Terminal};
 use spin::{Lazy, Mutex};
 
 pub static FRAMEBUFFER: Lazy<FrameBuffer> = Lazy::new(|| {
-    let framebuffer_response = FRAMEBUFFER_REQUEST.get_response().unwrap();
-    let framebuffer = framebuffer_response.framebuffers().next().unwrap();
+    let framebuffer_response = FRAMEBUFFER_REQUEST.response().unwrap();
+    let framebuffer = framebuffer_response.framebuffers()[0];
     FrameBuffer::from_limine(&framebuffer)
 });
 
 pub static TERMINAL: Lazy<Mutex<Terminal<FrameBuffer>>> = Lazy::new(|| {
-    let mut terminal = Terminal::new(*FRAMEBUFFER);
-    terminal.set_font_manager(Box::new(BitmapFont));
+    let mut terminal = Terminal::new(*FRAMEBUFFER, Box::new(BitmapFont));
     terminal.set_history_size(200);
     terminal.set_crnl_mapping(true);
     terminal.set_pty_writer(Box::new(|s| {

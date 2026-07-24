@@ -1,7 +1,7 @@
 use super::phys_to_virt;
 use crate::mm::bitmap::PageMan;
 use crate::println;
-use limine::request::MemoryMapRequest;
+use limine::request::MemmapRequest;
 use spin::{Lazy, Mutex};
 use x86_64::addr::PhysAddr;
 use x86_64::registers::control::Cr2;
@@ -16,15 +16,15 @@ use x86_64::structures::paging::Size4KiB;
 
 #[used]
 #[link_section = ".requests"]
-static MMAP_REQUEST: MemoryMapRequest = MemoryMapRequest::new();
+static MMAP_REQUEST: MemmapRequest = MemmapRequest::new();
 
 pub static ALLOCATOR_STATE: Lazy<Mutex<PageMan>> = Lazy::new(|| {
-    let res = MMAP_REQUEST.get_response().unwrap();
+    let res = MMAP_REQUEST.response().unwrap();
 
     let usable_mem = res
         .entries()
         .iter()
-        .filter(|e| e.entry_type == limine::memory_map::EntryType::USABLE);
+        .filter(|e| e.type_ == limine::memmap::MEMMAP_USABLE);
 
     let max_address = usable_mem
         .clone()
@@ -79,21 +79,6 @@ pub static ALLOCATOR_STATE: Lazy<Mutex<PageMan>> = Lazy::new(|| {
 
     Mutex::new(bitmap)
 });
-
-// reserved for future use
-pub fn get_entry_type_string(entry: &limine::memory_map::Entry) -> &str {
-    match entry.entry_type {
-        limine::memory_map::EntryType::USABLE => "USABLE",
-        limine::memory_map::EntryType::RESERVED => "RESERVED",
-        limine::memory_map::EntryType::ACPI_RECLAIMABLE => "ACPI_RECLAIMABLE",
-        limine::memory_map::EntryType::ACPI_NVS => "ACPI_NVS",
-        limine::memory_map::EntryType::BAD_MEMORY => "BAD_MEMORY",
-        limine::memory_map::EntryType::BOOTLOADER_RECLAIMABLE => "BOOTLOADER_RECLAIMABLE",
-        limine::memory_map::EntryType::EXECUTABLE_AND_MODULES => "EXECUTABLE_AND_MODULES",
-        limine::memory_map::EntryType::FRAMEBUFFER => "FRAMEBUFFER",
-        _ => "UNK",
-    }
-}
 
 pub fn init() {
     Lazy::force(&ALLOCATOR_STATE);

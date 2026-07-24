@@ -12,7 +12,7 @@ use spin::{Lazy, Mutex};
 pub static FRAMEBUFFER: Lazy<FrameBuffer> = Lazy::new(|| {
     let framebuffer_response = FRAMEBUFFER_REQUEST.response().unwrap();
     let framebuffer = framebuffer_response.framebuffers()[0];
-    FrameBuffer::from_limine(&framebuffer)
+    FrameBuffer::from_limine(framebuffer)
 });
 
 pub static TERMINAL: Lazy<Mutex<Terminal<FrameBuffer>>> = Lazy::new(|| {

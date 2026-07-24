@@ -162,10 +162,10 @@ fn build_img() -> PathBuf {
     ]);
     let initrd_path = manifest_dir.parent().unwrap().join("initrd.img");
     FatBuilder::create(initrd_files, &initrd_path).expect("failed to build initrd.img");
-    println!("Created initrd.img at {:#?}", &initrd_path);
+    println!("Created initrd.img at {:#?}", initrd_path);
 
     let kernel_path = Path::new(env!("CARGO_BIN_FILE_DOGLINKOS_2ND"));
-    println!("Building UEFI disk image for kernel at {:#?}", &kernel_path);
+    println!("Building UEFI disk image for kernel at {:#?}", kernel_path);
 
     let files = BTreeMap::from([
         ("kernel", kernel_path.to_path_buf()),
@@ -176,7 +176,7 @@ fn build_img() -> PathBuf {
 
     let img_path = manifest_dir.parent().unwrap().join("DoglinkOS-2nd.img");
     ImageBuilder::build(files, &img_path).expect("Failed to build UEFI disk image");
-    println!("Created bootable UEFI disk image at {:#?}", &img_path);
+    println!("Created bootable UEFI disk image at {:#?}", img_path);
 
     img_path
 }

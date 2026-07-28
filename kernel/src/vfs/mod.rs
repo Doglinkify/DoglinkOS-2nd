@@ -10,13 +10,24 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use limine::module::InternalModule;
-use limine::request::ModulesRequest;
+use limine::request::{ExecutableCmdlineRequest, ModulesRequest};
 use spin::{Lazy, Mutex};
 
 #[used]
 #[link_section = ".requests"]
-static MODULE_REQUEST: ModulesRequest =
+pub(crate) static MODULE_REQUEST: ModulesRequest =
     ModulesRequest::new_rev1(&[&InternalModule::new(c"/initrd.img", c"initrd", 0)]);
+
+#[used]
+#[link_section = ".requests"]
+static CMDLINE_REQUEST: ExecutableCmdlineRequest = ExecutableCmdlineRequest::new();
+
+pub(crate) static CMDLINE: Lazy<String> = Lazy::new(|| {
+    CMDLINE_REQUEST
+        .response()
+        .map(|resp| resp.cmdline().to_owned())
+        .unwrap_or_default()
+});
 
 static MOUNT_TABLE: Lazy<Vec<(String, Arc<dyn VfsDirectory + 'static>)>> = Lazy::new(Vec::new);
 

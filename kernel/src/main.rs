@@ -83,13 +83,12 @@ extern "C" fn kmain() -> ! {
                 in("rdi") 10, // back to ring 0
                 out("rcx") _,
             );
-            #[cfg(not(feature = "ps2_poll"))]
-            {
+            if !DoglinkOS_2nd::vfs::has_cmdline_flag("ps2_poll") {
                 hang();
-            }
-            #[cfg(feature = "ps2_poll")]
-            loop {
-                DoglinkOS_2nd::inputdev::poll_once();
+            } else {
+                loop {
+                    DoglinkOS_2nd::inputdev::poll_once();
+                }
             }
         }
     }

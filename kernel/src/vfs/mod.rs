@@ -29,6 +29,10 @@ pub(crate) static CMDLINE: Lazy<String> = Lazy::new(|| {
         .unwrap_or_default()
 });
 
+pub fn has_cmdline_flag(flag: &str) -> bool {
+    CMDLINE.split_ascii_whitespace().any(|arg| arg == flag)
+}
+
 static MOUNT_TABLE: Lazy<Vec<(String, Arc<dyn VfsDirectory + 'static>)>> = Lazy::new(Vec::new);
 
 pub trait VfsDirectory: Send + Sync {

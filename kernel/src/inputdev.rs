@@ -260,7 +260,6 @@ fn handle_status_data(status: u8, data: u8) {
     }
 }
 
-#[cfg(not(feature = "ps2_poll"))]
 pub fn interrupt_handler() {
     unsafe {
         loop {
@@ -274,7 +273,6 @@ pub fn interrupt_handler() {
     }
 }
 
-#[cfg(feature = "ps2_poll")]
 pub fn poll_once() {
     let mut status_port = PortReadOnly::<u8>::new(0x64);
     let mut data_port = PortReadOnly::<u8>::new(0x60);

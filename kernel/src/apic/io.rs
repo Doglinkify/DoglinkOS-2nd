@@ -2,7 +2,6 @@ use crate::mm::phys_to_virt;
 use crate::println;
 use spin::Mutex;
 use x2apic::ioapic::IoApic;
-#[cfg(not(feature = "ps2_poll"))]
 use x2apic::ioapic::{IrqFlags, IrqMode};
 
 static IOAPIC: Mutex<Option<IoApic>> = Mutex::new(None);
@@ -13,8 +12,7 @@ pub fn init(ioapic_phys_addr: u64, lapic_id: u8) {
     *IOAPIC.lock() = unsafe {
         let mut tmp = IoApic::new(ioapic_virt_addr);
         tmp.init(35);
-        #[cfg(not(feature = "ps2_poll"))]
-        {
+        if !crate::vfs::has_cmdline_flag("ps2_poll") {
             for irq in 0..=tmp.max_table_entry() {
                 tmp.disable_irq(irq);
             }
@@ -32,9 +30,7 @@ pub fn init(ioapic_phys_addr: u64, lapic_id: u8) {
             ent_12.set_dest(lapic_id);
             tmp.set_table_entry(12, ent_12);
             tmp.enable_irq(12);
-        }
-        #[cfg(feature = "ps2_poll")]
-        {
+        } else {
             _ = lapic_id;
         }
         Some(tmp)

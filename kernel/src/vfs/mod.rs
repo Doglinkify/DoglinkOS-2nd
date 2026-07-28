@@ -5,12 +5,13 @@ pub use fat::get_fs as get_fat_fs;
 
 use crate::blockdev::ramdisk::RamDisk;
 use crate::println;
+use crate::cmdline;
 use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use limine::module::InternalModule;
-use limine::request::{ExecutableCmdlineRequest, ModulesRequest};
+use limine::request::ModulesRequest;
 use spin::{Lazy, Mutex};
 
 #[used]
@@ -18,19 +19,8 @@ use spin::{Lazy, Mutex};
 pub(crate) static MODULE_REQUEST: ModulesRequest =
     ModulesRequest::new_rev1(&[&InternalModule::new(c"/initrd.img", c"initrd", 0)]);
 
-#[used]
-#[link_section = ".requests"]
-static CMDLINE_REQUEST: ExecutableCmdlineRequest = ExecutableCmdlineRequest::new();
-
-pub(crate) static CMDLINE: Lazy<String> = Lazy::new(|| {
-    CMDLINE_REQUEST
-        .response()
-        .map(|resp| resp.cmdline().to_owned())
-        .unwrap_or_default()
-});
-
 pub fn has_cmdline_flag(flag: &str) -> bool {
-    CMDLINE.split_ascii_whitespace().any(|arg| arg == flag)
+    cmdline::has_cmdline_flag(flag)
 }
 
 static MOUNT_TABLE: Lazy<Vec<(String, Arc<dyn VfsDirectory + 'static>)>> = Lazy::new(Vec::new);

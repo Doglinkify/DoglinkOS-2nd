@@ -1,14 +1,11 @@
 use core::{
-    fmt::Write,
     sync::atomic::{AtomicBool, Ordering},
 };
 
 use x86_64::instructions::port::{PortReadOnly, PortWriteOnly};
 
-use crate::console::ECHO_FLAG;
-
 const PORT: u16 = 0x3f8;
-pub(super) static SERIAL_OK: AtomicBool = AtomicBool::new(false);
+pub(crate) static SERIAL_OK: AtomicBool = AtomicBool::new(false);
 
 #[inline]
 unsafe fn outb(port: u16, value: u8) {
@@ -51,10 +48,6 @@ pub fn read() -> Option<u8> {
             // translate CR to LF
             res = 0x0a;
         }
-        if ECHO_FLAG.load(Ordering::Relaxed) {
-            super::TERMINAL.lock().process(&[res]);
-            write(res);
-        }
         Some(res)
     } else {
         None
@@ -75,14 +68,5 @@ pub fn write(data: u8) {
 pub fn write_bytes(buf: &[u8]) {
     for &c in buf {
         write(c);
-    }
-}
-
-pub struct Serial;
-
-impl Write for Serial {
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        write_bytes(s.as_bytes());
-        Ok(())
     }
 }

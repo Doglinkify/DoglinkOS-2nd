@@ -1,7 +1,7 @@
 use alloc::sync::Arc;
 use spin::Mutex;
 
-use crate::vfs::{SeekFrom, VfsFile, CMDLINE};
+use crate::vfs::{SeekFrom, VfsFile};
 
 struct CmdlineDevice {
     pos: usize,
@@ -9,11 +9,11 @@ struct CmdlineDevice {
 
 impl VfsFile for CmdlineDevice {
     fn size(&mut self) -> usize {
-        CMDLINE.len()
+        crate::cmdline::CMDLINE.len()
     }
 
     fn read(&mut self, buf: &mut [u8]) -> usize {
-        let data = CMDLINE.as_bytes();
+        let data = crate::cmdline::CMDLINE.as_bytes();
         if self.pos >= data.len() {
             return 0;
         }
@@ -28,7 +28,7 @@ impl VfsFile for CmdlineDevice {
     }
 
     fn seek(&mut self, pos: SeekFrom) -> usize {
-        let len = CMDLINE.len();
+        let len = crate::cmdline::CMDLINE.len();
         let new_pos = match pos {
             SeekFrom::Start(pos) => pos.min(len),
             SeekFrom::End(offset) => len.saturating_add_signed(offset).min(len),

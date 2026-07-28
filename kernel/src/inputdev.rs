@@ -143,15 +143,21 @@ pub fn handle_mouse(packet: u8) {
             //     flags & 1
             // );
             if (flags >> 1) & 1 == 1 {
-                let mut terminal = crate::console::TERMINAL.lock();
-                terminal.handle_mouse(MouseInput::Scroll(y as isize));
-                let echo = crate::console::ECHO_FLAG.load(core::sync::atomic::Ordering::Relaxed);
-                while let Some(b) = crate::console::ECHO_BUFFER.pop() {
-                    if echo {
-                        serial::write(b);
-                        terminal.process(&[b]);
+                if crate::stdio::tty_enabled() {
+                    let mut terminal = crate::console::TERMINAL.lock();
+                    terminal.handle_mouse(MouseInput::Scroll(y as isize));
+                    let echo = crate::console::ECHO_FLAG.load(core::sync::atomic::Ordering::Relaxed);
+                    while let Some(b) = crate::console::ECHO_BUFFER.pop() {
+                        if echo {
+                            if crate::stdio::serial_enabled()
+                                && serial::SERIAL_OK.load(core::sync::atomic::Ordering::Relaxed)
+                            {
+                                serial::write(b);
+                            }
+                            terminal.process(&[b]);
+                        }
+                        crate::console::INPUT_BUFFER.force_push(b);
                     }
-                    crate::console::INPUT_BUFFER.force_push(b);
                 }
             }
             CURRENT_PACKET.store(0, Ordering::Relaxed);
@@ -247,15 +253,21 @@ fn handle_status_data(status: u8, data: u8) {
         handle_mouse(data);
     } else {
         let scancode = data;
-        let mut term = crate::console::TERMINAL.lock();
-        term.handle_keyboard(scancode);
-        let echo = crate::console::ECHO_FLAG.load(core::sync::atomic::Ordering::Relaxed);
-        while let Some(b) = crate::console::ECHO_BUFFER.pop() {
-            if echo {
-                serial::write(b);
-                term.process(&[b]);
+        if crate::stdio::tty_enabled() {
+            let mut term = crate::console::TERMINAL.lock();
+            term.handle_keyboard(scancode);
+            let echo = crate::console::ECHO_FLAG.load(core::sync::atomic::Ordering::Relaxed);
+            while let Some(b) = crate::console::ECHO_BUFFER.pop() {
+                if echo {
+                    if crate::stdio::serial_enabled()
+                        && serial::SERIAL_OK.load(core::sync::atomic::Ordering::Relaxed)
+                    {
+                        serial::write(b);
+                    }
+                    term.process(&[b]);
+                }
+                crate::console::INPUT_BUFFER.force_push(b);
             }
-            crate::console::INPUT_BUFFER.force_push(b);
         }
     }
 }

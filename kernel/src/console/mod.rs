@@ -35,6 +35,7 @@ pub static ECHO_FLAG: AtomicBool = AtomicBool::new(true);
 
 pub fn init() {
     Lazy::force(&TERMINAL);
+    crate::stdio::init();
     serial::init();
 }
 
@@ -57,15 +58,20 @@ macro_rules! dbg {
 }
 
 pub fn _print(args: core::fmt::Arguments) {
-    TERMINAL.lock().write_fmt(args).unwrap();
-    if serial::SERIAL_OK.load(core::sync::atomic::Ordering::Relaxed) {
-        serial::Serial.write_fmt(args).unwrap();
+    struct Stdout;
+    impl Write for Stdout {
+        fn write_str(&mut self, s: &str) -> core::fmt::Result {
+            crate::stdio::write_stdout(s.as_bytes());
+            Ok(())
+        }
     }
+    let _ = Stdout.write_fmt(args);
 }
 
 pub fn write(buf: &[u8]) {
-    TERMINAL.lock().process(buf);
-    if serial::SERIAL_OK.load(core::sync::atomic::Ordering::Relaxed) {
-        serial::write_bytes(buf);
-    }
+    crate::stdio::write_stdout(buf);
+}
+
+pub fn write_err(buf: &[u8]) {
+    crate::stdio::write_stderr(buf);
 }

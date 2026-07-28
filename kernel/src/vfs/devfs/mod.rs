@@ -5,6 +5,7 @@ mod initrd;
 mod nvme;
 mod pcspk;
 mod power;
+mod serial;
 mod stderr;
 mod stdout;
 

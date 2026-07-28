@@ -15,9 +15,7 @@ impl VfsFile for StderrDevice {
     }
 
     fn write(&mut self, buf: &[u8]) -> usize {
-        crate::console::write(b"\x1b[31m");
-        crate::console::write(buf);
-        crate::console::write(b"\x1b[0m");
+        crate::console::write_err(buf);
         buf.len()
     }
 

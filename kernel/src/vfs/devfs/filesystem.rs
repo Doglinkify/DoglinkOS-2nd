@@ -17,6 +17,8 @@ impl VfsDirectory for DevFileSystem {
             Ok(file)
         } else if let Ok(file) = super::stderr::open(path) {
             Ok(file)
+        } else if let Ok(file) = super::serial::open(path) {
+            Ok(file)
         } else if let Ok(file) = super::cmdline::open(path) {
             Ok(file)
         } else if let Ok(file) = super::pcspk::open(path) {

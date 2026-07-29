@@ -218,6 +218,7 @@ dependencies = [
  "gpt",
  "imgview",
  "infinite-loop",
+ "ipc-demo",
  "ovmf-prebuilt",
  "tempfile",
 ]
@@ -607,6 +608,13 @@ dependencies = [
 
 [[package]]
 name = "infinite-loop"
+version = "0.1.0"
+dependencies = [
+ "dlos-app-rt",
+]
+
+[[package]]
+name = "ipc-demo"
 version = "0.1.0"
 dependencies = [
  "dlos-app-rt",

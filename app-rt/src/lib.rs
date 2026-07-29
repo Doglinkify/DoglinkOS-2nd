@@ -284,6 +284,90 @@ pub fn sys_closedir(fd: usize) {
     }
 }
 
+pub const IPC_FLAG_NONBLOCK: usize = 1;
+
+pub const IPC_CMD_CREATE: usize = 0;
+pub const IPC_CMD_SEND: usize = 1;
+pub const IPC_CMD_RECV: usize = 2;
+pub const IPC_CMD_CLOSE: usize = 3;
+pub const IPC_CMD_DUP: usize = 4;
+
+pub fn sys_ipc(
+    cmd: usize,
+    arg0: usize,
+    arg1: usize,
+    arg2: usize,
+    arg3: usize,
+    arg4: usize,
+) -> isize {
+    let ret: isize;
+    unsafe {
+        core::arch::asm!(
+            "int 0x80",
+            in("rax") 21,
+            in("rdi") cmd,
+            in("rsi") arg0,
+            in("rdx") arg1,
+            in("rcx") arg2,
+            in("r8") arg3,
+            in("r9") arg4,
+            lateout("rax") ret,
+        );
+    }
+    ret
+}
+
+pub fn sys_ipc_create(flags: usize) -> Option<(usize, usize)> {
+    let left: isize;
+    let right: usize;
+    unsafe {
+        core::arch::asm!(
+            "int 0x80",
+            in("rax") 21,
+            in("rdi") IPC_CMD_CREATE,
+            in("rsi") flags,
+            lateout("rax") left,
+            lateout("rdx") right,
+        );
+    }
+    if left < 0 {
+        None
+    } else {
+        Some((left as usize, right))
+    }
+}
+
+pub fn sys_ipc_send(handle: usize, buf: &[u8], flags: usize) -> isize {
+    sys_ipc(
+        IPC_CMD_SEND,
+        handle,
+        buf.as_ptr() as usize,
+        buf.len(),
+        flags,
+        0,
+    )
+}
+
+pub fn sys_ipc_recv(handle: usize, buf: &mut [u8], flags: usize) -> isize {
+    sys_ipc(
+        IPC_CMD_RECV,
+        handle,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        flags,
+        0,
+    )
+}
+
+pub fn sys_ipc_close(handle: usize) -> isize {
+    sys_ipc(IPC_CMD_CLOSE, handle, 0, 0, 0, 0)
+}
+
+pub fn sys_ipc_dup(handle: usize) -> Option<usize> {
+    let res = sys_ipc(IPC_CMD_DUP, handle, 0, 0, 0, 0);
+    if res < 0 { None } else { Some(res as usize) }
+}
+
 #[macro_export]
 macro_rules! print {
     ($($arg:tt)*) => ($crate::_print(format_args!($($arg)*)));

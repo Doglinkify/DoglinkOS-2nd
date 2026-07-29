@@ -87,13 +87,16 @@ pub extern "x86-interrupt" fn handler4(_: InterruptStackFrame) {
 pub extern "x86-interrupt" fn handler5(f: InterruptStackFrame, code: PageFaultErrorCode) {
     match f.code_segment.rpl() {
         PrivilegeLevel::Ring0 => {
-            println!(
-                "page fault in kernel code, caused by instruction at {:?}, addr: {:?}, code: {:?}",
-                f.instruction_pointer,
-                Cr2::read().unwrap(),
-                code
-            );
-            loop {}
+            let addr = Cr2::read().unwrap();
+            if addr.as_u64() & (1u64 << 63) != 0 {
+                println!(
+                    "page fault in kernel code, caused by instruction at {:?}, addr: {:?}, code: {:?}",
+                    f.instruction_pointer, addr, code
+                );
+                loop {}
+            } else {
+                crate::mm::page_alloc::do_user_page_fault(f.instruction_pointer, code)
+            }
         }
         PrivilegeLevel::Ring3 => {
             crate::mm::page_alloc::do_user_page_fault(f.instruction_pointer, code)

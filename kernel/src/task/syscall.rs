@@ -50,7 +50,7 @@ pub extern "x86-interrupt" fn syscall_handler(_: InterruptStackFrame) {
     )
 }
 
-const NUM_SYSCALLS: usize = 21;
+const NUM_SYSCALLS: usize = 22;
 
 const SYSCALL_TABLE: [fn(&mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_test,
@@ -74,6 +74,7 @@ const SYSCALL_TABLE: [fn(&mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_opendir,
     sys_getdents,
     sys_closedir,
+    sys_ipc,
 ];
 
 unsafe extern "C" fn do_syscall(args: *mut SyscallStackFrame) {
@@ -145,13 +146,10 @@ pub fn sys_brk(args: &mut SyscallStackFrame) {
 }
 
 pub fn sys_waitpid(args: &mut SyscallStackFrame) {
-    {
-        let current = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
-        let mut tasks = crate::task::process::TASKS.lock();
-        let task = tasks[current].as_mut().unwrap();
-        task.waiting_pid = Some(args.rdi as usize);
-    }
-    crate::task::sched::schedule(args, false);
+    crate::task::sched::block_current(
+        args,
+        crate::task::process::WaitReason::WaitPid(args.rdi as usize),
+    );
 }
 
 pub fn sys_getpid(args: &mut SyscallStackFrame) {
@@ -321,4 +319,8 @@ pub fn sys_closedir(args: &mut SyscallStackFrame) {
     let mut tasks = crate::task::process::TASKS.lock();
     let task = tasks[current].as_mut().unwrap();
     task.directories[args.rsi as usize] = None;
+}
+
+pub fn sys_ipc(args: &mut SyscallStackFrame) {
+    crate::task::ipc::syscall(args);
 }

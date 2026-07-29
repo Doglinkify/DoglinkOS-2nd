@@ -1,0 +1,7 @@
+[package]
+name = "ipc-demo"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dlos-app-rt = { path = "../../app-rt" }

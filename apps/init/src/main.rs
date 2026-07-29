@@ -86,6 +86,7 @@ fn print_help() {
     println!(
         "  imgview            Draw an image on the framebuffer (can mess up the terminal and become hard to clear)"
     );
+    println!("  ipc-demo           Fork + bidirectional anonymous IPC test");
 }
 
 fn shell_main_loop() {

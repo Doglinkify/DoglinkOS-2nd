@@ -1,5 +1,6 @@
 use crate::mm::page_alloc::alloc_physical_page;
 use crate::mm::phys_to_virt;
+use crate::task::ipc::{self, IpcHandle};
 use alloc::sync::Arc;
 use core::cmp::max;
 use core::sync::atomic::AtomicUsize;
@@ -44,6 +45,19 @@ pub struct ProcessContext {
     pub ss: u64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WaitReason {
+    WaitPid(usize),
+    // Additional wait reasons can be added here when kernel-visible blocking
+    // states beyond waitpid are introduced.
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProcessState {
+    Runnable,
+    Blocked(WaitReason),
+}
+
 pub struct Process<'a> {
     pub page_table: OffsetPageTable<'a>,
     pub context: ProcessContext,
@@ -51,9 +65,10 @@ pub struct Process<'a> {
     pub tm: u64,
     pub fs: VirtAddr,
     pub brk: u64,
-    pub waiting_pid: Option<usize>,
+    pub state: ProcessState,
     pub files: [Option<Arc<Mutex<dyn crate::vfs::VfsFile>>>; 64],
     pub directories: [Option<Arc<Mutex<dyn crate::vfs::VfsDirHandle>>>; 64],
+    pub ipc_handles: [Option<IpcHandle>; ipc::IPC_MAX_HANDLES],
 }
 
 pub static ORIGINAL_KERNEL_CR3: Lazy<(PhysFrame, Cr3Flags)> = Lazy::new(Cr3::read);
@@ -95,6 +110,8 @@ const FPU_INIT: [u128; 32] = [
 
 impl Process<'_> {
     pub fn task_0() -> Self {
+        // PID 0 is reserved for the idle task. The scheduler relies on it as the
+        // always-runnable fallback when no normal task can be selected.
         let mut files = [const { None }; 64];
         files[0] = crate::vfs::get_file("/dev/stderr").ok();
         files[1] = crate::vfs::get_file("/dev/stdout").ok();
@@ -105,9 +122,10 @@ impl Process<'_> {
             tm: 10,
             fs: VirtAddr::new(0),
             brk: 0,
-            waiting_pid: None,
+            state: ProcessState::Runnable,
             files,
             directories: [const { None }; 64],
+            ipc_handles: [const { None }; ipc::IPC_MAX_HANDLES],
         }
     }
 
@@ -192,9 +210,10 @@ impl Process<'_> {
             tm: 0,
             fs: VirtAddr::new(0),
             brk: self.brk,
-            waiting_pid: None,
+            state: ProcessState::Runnable,
             files: self.files.clone(),
             directories: self.directories.clone(),
+            ipc_handles: ipc::clone_handle_table(&self.ipc_handles),
         }
     }
 
@@ -276,6 +295,7 @@ pub fn do_exec(args: &mut ProcessContext) {
         current_task.fpu_state = FPU_INIT;
         current_task.fs = VirtAddr::zero();
         current_task.brk = 0;
+        current_task.state = ProcessState::Runnable;
         let mut buf = alloc::vec![0u8; size];
         elf_file.read_exact(buf.as_mut_slice());
         let new_elf = goblin::elf::Elf::parse(buf.as_slice());
@@ -336,7 +356,10 @@ pub fn do_exit(args: &mut ProcessContext) {
     // crate::println!("[DEBUG] task: process {c_tid} exited");
     {
         let mut tasks = TASKS.lock();
-        tasks[c_tid].as_mut().unwrap().free_page_tables(false);
+        if let Some(task) = tasks[c_tid].as_mut() {
+            ipc::release_handle_table(&mut task.ipc_handles);
+            task.free_page_tables(false);
+        }
         tasks[c_tid] = None;
     }
     super::sched::schedule(args, true);

@@ -3,8 +3,24 @@ use x86_64::registers::control::Cr3;
 use x86_64::structures::paging::PhysFrame;
 use x86_64::PhysAddr;
 
+use super::process::ProcessContext;
+use super::process::ProcessState;
+use super::process::WaitReason;
+
 pub static CURRENT_TASK_ID: AtomicUsize = AtomicUsize::new(0);
 pub static TOTAL_TICKS: AtomicUsize = AtomicUsize::new(0);
+const IDLE_TASK_ID: usize = 0;
+
+pub fn block_current(context: &mut ProcessContext, reason: WaitReason) {
+    let current = CURRENT_TASK_ID.load(Ordering::Relaxed);
+    {
+        let mut tasks = super::process::TASKS.lock();
+        if let Some(task) = tasks[current].as_mut() {
+            task.state = ProcessState::Blocked(reason);
+        }
+    }
+    schedule(context, false);
+}
 
 pub fn switch_to(
     context: &mut super::process::ProcessContext,
@@ -60,18 +76,20 @@ pub fn schedule(context: &mut super::process::ProcessContext, current_process_ex
         let mut tasks = super::process::TASKS.lock();
         for tid in 0..64 {
             if tasks[tid].is_some() {
+                let should_wake = matches!(
+                    tasks[tid].as_ref().unwrap().state,
+                    ProcessState::Blocked(WaitReason::WaitPid(pid)) if tasks[pid].is_none()
+                );
+                if should_wake {
+                    tasks[tid].as_mut().unwrap().state = ProcessState::Runnable;
+                }
                 let process = tasks[tid].as_ref().unwrap();
-                let wait_ok = match process.waiting_pid {
-                    Some(pid) => tasks[pid].is_none(),
-                    None => true,
-                };
-                if tid != CURRENT_TASK_ID.load(Ordering::Relaxed) && process.tm > max_tm && wait_ok
+                if tid != CURRENT_TASK_ID.load(Ordering::Relaxed)
+                    && process.tm > max_tm
+                    && matches!(process.state, ProcessState::Runnable)
                 {
                     max_tm = process.tm;
                     max_tid = tid;
-                }
-                if wait_ok {
-                    tasks[tid].as_mut().unwrap().waiting_pid = None;
                 }
             }
         }
@@ -81,7 +99,25 @@ pub fn schedule(context: &mut super::process::ProcessContext, current_process_ex
                     process.tm = 10;
                 }
             }
-            max_tid = 0;
+            for tid in 0..64 {
+                if let Some(process) = tasks[tid].as_ref() {
+                    if matches!(process.state, ProcessState::Runnable)
+                        && tid != CURRENT_TASK_ID.load(Ordering::Relaxed)
+                    {
+                        max_tid = tid;
+                        break;
+                    }
+                }
+            }
+            if max_tid == 127 {
+                // PID 0 is the idle task. It does not participate in normal blocking paths,
+                // so it must remain runnable and gives schedule() a guaranteed fallback.
+                debug_assert!(tasks
+                    .get(IDLE_TASK_ID)
+                    .and_then(Option::as_ref)
+                    .is_some_and(|task| matches!(task.state, ProcessState::Runnable)));
+                max_tid = IDLE_TASK_ID;
+            }
         }
         tasks[max_tid].as_mut().unwrap().tm -= 1;
     }

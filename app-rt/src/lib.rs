@@ -291,6 +291,9 @@ pub const IPC_CMD_SEND: usize = 1;
 pub const IPC_CMD_RECV: usize = 2;
 pub const IPC_CMD_CLOSE: usize = 3;
 pub const IPC_CMD_DUP: usize = 4;
+pub const IPC_CMD_BIND: usize = 5;
+pub const IPC_CMD_CONNECT: usize = 6;
+pub const IPC_CMD_ACCEPT: usize = 7;
 
 pub fn sys_ipc(
     cmd: usize,
@@ -365,6 +368,35 @@ pub fn sys_ipc_close(handle: usize) -> isize {
 
 pub fn sys_ipc_dup(handle: usize) -> Option<usize> {
     let res = sys_ipc(IPC_CMD_DUP, handle, 0, 0, 0, 0);
+    if res < 0 { None } else { Some(res as usize) }
+}
+
+pub fn sys_ipc_bind(name: &str) -> Option<usize> {
+    let res = sys_ipc(
+        IPC_CMD_BIND,
+        name.as_ptr() as usize,
+        name.len(),
+        0,
+        0,
+        0,
+    );
+    if res < 0 { None } else { Some(res as usize) }
+}
+
+pub fn sys_ipc_connect(name: &str) -> Option<usize> {
+    let res = sys_ipc(
+        IPC_CMD_CONNECT,
+        name.as_ptr() as usize,
+        name.len(),
+        0,
+        0,
+        0,
+    );
+    if res < 0 { None } else { Some(res as usize) }
+}
+
+pub fn sys_ipc_accept(handle: usize) -> Option<usize> {
+    let res = sys_ipc(IPC_CMD_ACCEPT, handle, 0, 0, 0, 0);
     if res < 0 { None } else { Some(res as usize) }
 }
 

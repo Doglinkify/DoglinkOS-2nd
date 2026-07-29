@@ -8,6 +8,7 @@ mod power;
 mod serial;
 mod stderr;
 mod stdout;
+mod tty;
 
 use alloc::sync::Arc;
 

@@ -116,7 +116,6 @@ extern "C" fn _start() -> ! {
         let _ = sys_ipc_close(parent_end);
 
         let mut buf = [0u8; 128];
-        buf[0] = 1; // trigger CoW on stack
         let recv_len = recv_poll(child_end, &mut buf);
         if recv_len < 0 {
             eprintln!("ipc-demo child: recv failed {}", recv_len);

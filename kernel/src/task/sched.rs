@@ -71,55 +71,56 @@ pub(crate) extern "C" fn timer(context: *mut super::process::ProcessContext) {
 
 pub fn schedule(context: &mut super::process::ProcessContext, current_process_exited: bool) {
     let mut max_tm = 0;
-    let mut max_tid = 127;
-    {
-        let mut tasks = super::process::TASKS.lock();
-        for tid in 0..64 {
-            if tasks[tid].is_some() {
-                let should_wake = matches!(
-                    tasks[tid].as_ref().unwrap().state,
-                    ProcessState::Blocked(WaitReason::WaitPid(pid)) if tasks[pid].is_none()
-                );
-                if should_wake {
-                    tasks[tid].as_mut().unwrap().state = ProcessState::Runnable;
-                }
-                let process = tasks[tid].as_ref().unwrap();
-                if tid != CURRENT_TASK_ID.load(Ordering::Relaxed)
-                    && process.tm > max_tm
-                    && matches!(process.state, ProcessState::Runnable)
-                {
-                    max_tm = process.tm;
-                    max_tid = tid;
-                }
+    let mut max_tid = None;
+    let mut tasks = super::process::TASKS.lock();
+    for tid in 0..tasks.len() {
+        if tasks[tid].is_some() {
+            let should_wake = matches!(
+                tasks[tid].as_ref().unwrap().state,
+                ProcessState::Blocked(WaitReason::WaitPid(pid))
+                    if tasks.get(pid).is_none_or(Option::is_none)
+            );
+            if should_wake {
+                tasks[tid].as_mut().unwrap().state = ProcessState::Runnable;
+            }
+            let process = tasks[tid].as_ref().unwrap();
+            if tid != CURRENT_TASK_ID.load(Ordering::Relaxed)
+                && process.tm > max_tm
+                && matches!(process.state, ProcessState::Runnable)
+            {
+                max_tm = process.tm;
+                max_tid = Some(tid);
             }
         }
-        if max_tid == 127 {
-            for tid in 0..64 {
-                if let Some(ref mut process) = tasks[tid] {
-                    process.tm = 10;
-                }
-            }
-            for tid in 0..64 {
-                if let Some(process) = tasks[tid].as_ref() {
-                    if matches!(process.state, ProcessState::Runnable)
-                        && tid != CURRENT_TASK_ID.load(Ordering::Relaxed)
-                    {
-                        max_tid = tid;
-                        break;
-                    }
-                }
-            }
-            if max_tid == 127 {
-                // PID 0 is the idle task. It does not participate in normal blocking paths,
-                // so it must remain runnable and gives schedule() a guaranteed fallback.
-                debug_assert!(tasks
-                    .get(IDLE_TASK_ID)
-                    .and_then(Option::as_ref)
-                    .is_some_and(|task| matches!(task.state, ProcessState::Runnable)));
-                max_tid = IDLE_TASK_ID;
-            }
-        }
-        tasks[max_tid].as_mut().unwrap().tm -= 1;
     }
+    if max_tid.is_none() {
+        for tid in 0..tasks.len() {
+            if let Some(ref mut process) = tasks[tid] {
+                process.tm = 10;
+            }
+        }
+        for tid in 0..tasks.len() {
+            if let Some(process) = tasks[tid].as_ref() {
+                if matches!(process.state, ProcessState::Runnable)
+                    && tid != CURRENT_TASK_ID.load(Ordering::Relaxed)
+                {
+                    max_tid = Some(tid);
+                    break;
+                }
+            }
+        }
+        if max_tid.is_none() {
+            // PID 0 is the idle task. It does not participate in normal blocking paths,
+            // so it must remain runnable and gives schedule() a guaranteed fallback.
+            debug_assert!(tasks
+                .get(IDLE_TASK_ID)
+                .and_then(Option::as_ref)
+                .is_some_and(|task| matches!(task.state, ProcessState::Runnable)));
+            max_tid = Some(IDLE_TASK_ID);
+        }
+    }
+    let max_tid = max_tid.unwrap();
+    tasks[max_tid].as_mut().unwrap().tm -= 1;
+    drop(tasks);
     switch_to(context, max_tid, current_process_exited);
 }

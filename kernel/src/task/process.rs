@@ -2,6 +2,7 @@ use crate::mm::page_alloc::alloc_physical_page;
 use crate::mm::phys_to_virt;
 use crate::task::ipc::{self, IpcHandle};
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::cmp::max;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::Ordering;
@@ -266,17 +267,20 @@ impl Process<'_> {
     }
 }
 
-pub static TASKS: Mutex<[Option<Process>; 64]> = Mutex::new([const { None }; 64]);
+pub static TASKS: Mutex<Vec<Option<Process>>> = Mutex::new(Vec::new());
 
 pub fn do_fork(context: &mut ProcessContext) {
     static NEXT_TID: AtomicUsize = AtomicUsize::new(0);
-    NEXT_TID.fetch_add(1, Ordering::Relaxed);
+    let new_tid = NEXT_TID.fetch_add(1, Ordering::Relaxed) + 1;
     let mut tasks = TASKS.lock();
     let new_process = tasks[super::sched::CURRENT_TASK_ID.load(Ordering::Relaxed)]
         .as_mut()
         .unwrap()
-        .copy_process(context, NEXT_TID.load(Ordering::Relaxed));
-    tasks[NEXT_TID.load(Ordering::Relaxed)] = Some(new_process);
+        .copy_process(context, new_tid);
+    if tasks.len() <= new_tid {
+        tasks.resize_with(new_tid + 1, || None);
+    }
+    tasks[new_tid] = Some(new_process);
 }
 
 pub fn do_exec(args: &mut ProcessContext) {

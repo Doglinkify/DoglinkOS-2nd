@@ -50,7 +50,11 @@ pub fn init() {
         let new_cr3_va;
         {
             let mut tasks = self::process::TASKS.lock();
-            tasks[0] = Some(self::process::Process::task_0());
+            if tasks.is_empty() {
+                tasks.push(Some(self::process::Process::task_0()));
+            } else {
+                tasks[0] = Some(self::process::Process::task_0());
+            }
             new_cr3_va = tasks[0].as_ref().unwrap().page_table.level_4_table() as *const _ as u64;
         }
         let new_cr3 =

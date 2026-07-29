@@ -275,10 +275,7 @@ fn sys_connect(args: &mut ProcessContext) -> isize {
     };
     let listener = {
         let named = NAMED_ENDPOINTS.lock();
-        let Some((_, listener)) = named
-            .iter()
-            .find(|(entry_name, _)| entry_name == &name)
-        else {
+        let Some((_, listener)) = named.iter().find(|(entry_name, _)| entry_name == &name) else {
             return IPC_ENOENT;
         };
         listener.clone()

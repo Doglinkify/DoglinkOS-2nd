@@ -76,7 +76,10 @@ fn run_named_server() -> ! {
         let mut buf = [0u8; 128];
         let recv_len = recv_poll(conn, &mut buf);
         if recv_len < 0 {
-            eprintln!("ipc-demo server: recv from client {client_id} failed {}", recv_len);
+            eprintln!(
+                "ipc-demo server: recv from client {client_id} failed {}",
+                recv_len
+            );
         } else {
             let msg = core::str::from_utf8(&buf[..recv_len as usize]).unwrap_or("<invalid utf8>");
             println!("ipc-demo server accepted client {client_id}: {msg}");
@@ -88,7 +91,10 @@ fn run_named_server() -> ! {
             let reply_len = prefix.len() + 1;
             let send_len = sys_ipc_send(conn, &reply[..reply_len], 0);
             if send_len < 0 {
-                eprintln!("ipc-demo server: reply to client {client_id} failed {}", send_len);
+                eprintln!(
+                    "ipc-demo server: reply to client {client_id} failed {}",
+                    send_len
+                );
             }
         }
         let _ = sys_ipc_close(conn);

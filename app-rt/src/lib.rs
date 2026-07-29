@@ -372,26 +372,12 @@ pub fn sys_ipc_dup(handle: usize) -> Option<usize> {
 }
 
 pub fn sys_ipc_bind(name: &str) -> Option<usize> {
-    let res = sys_ipc(
-        IPC_CMD_BIND,
-        name.as_ptr() as usize,
-        name.len(),
-        0,
-        0,
-        0,
-    );
+    let res = sys_ipc(IPC_CMD_BIND, name.as_ptr() as usize, name.len(), 0, 0, 0);
     if res < 0 { None } else { Some(res as usize) }
 }
 
 pub fn sys_ipc_connect(name: &str) -> Option<usize> {
-    let res = sys_ipc(
-        IPC_CMD_CONNECT,
-        name.as_ptr() as usize,
-        name.len(),
-        0,
-        0,
-        0,
-    );
+    let res = sys_ipc(IPC_CMD_CONNECT, name.as_ptr() as usize, name.len(), 0, 0, 0);
     if res < 0 { None } else { Some(res as usize) }
 }
 

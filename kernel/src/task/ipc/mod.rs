@@ -49,8 +49,9 @@ enum IpcHandleObject {
     Listener(Arc<Mutex<IpcListener>>),
 }
 
-static NAMED_ENDPOINTS: Lazy<Mutex<Vec<(String, Arc<Mutex<IpcListener>>)>>> =
-    Lazy::new(|| Mutex::new(Vec::new()));
+type NamedEndpoint = (String, Arc<Mutex<IpcListener>>);
+
+static NAMED_ENDPOINTS: Lazy<Mutex<Vec<NamedEndpoint>>> = Lazy::new(|| Mutex::new(Vec::new()));
 
 struct IpcListener {
     refs: usize,
@@ -224,9 +225,8 @@ fn sys_dup(args: &mut ProcessContext) -> isize {
         task.ipc_handles
             .iter()
             .position(Option::is_none)
-            .map(|slot| {
+            .inspect(|&slot| {
                 task.ipc_handles[slot] = Some(duped.clone());
-                slot
             })
     };
     let Some(slot) = slot else {

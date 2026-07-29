@@ -142,8 +142,8 @@ pub fn handle_mouse(packet: u8) {
             //     (flags >> 1) & 1,
             //     flags & 1
             // );
-            if (flags >> 1) & 1 == 1 {
-                if crate::stdio::tty_enabled() {
+            if (flags >> 1) & 1 == 1
+                && crate::stdio::tty_enabled() {
                     let mut terminal = crate::console::TERMINAL.lock();
                     terminal.handle_mouse(MouseInput::Scroll(y as isize));
                     let echo =
@@ -160,7 +160,6 @@ pub fn handle_mouse(packet: u8) {
                         crate::console::INPUT_BUFFER.force_push(b);
                     }
                 }
-            }
             CURRENT_PACKET.store(0, Ordering::Relaxed);
         }
         _ => unreachable!(),

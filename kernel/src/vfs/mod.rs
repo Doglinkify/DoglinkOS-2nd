@@ -4,8 +4,8 @@ mod fat;
 pub use fat::get_fs as get_fat_fs;
 
 use crate::blockdev::ramdisk::RamDisk;
-use crate::println;
 use crate::cmdline;
+use crate::println;
 use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -27,6 +27,7 @@ static MOUNT_TABLE: Lazy<Vec<(String, Arc<dyn VfsDirectory + 'static>)>> = Lazy:
 
 pub trait VfsDirectory: Send + Sync {
     fn file(&self, path: &str) -> Result<Arc<Mutex<dyn VfsFile + '_>>, ()>;
+    fn directory(&self, path: &str) -> Result<Arc<Mutex<dyn VfsDirHandle + '_>>, ()>;
     fn create_file_or_open_existing(&self, path: &str) -> Result<Arc<Mutex<dyn VfsFile + '_>>, ()>;
     fn remove(&self, path: &str) -> bool;
 }
@@ -54,6 +55,37 @@ pub trait VfsFile: Send {
             }
         }
     }
+}
+
+pub const DIRENT_NAME_CAP: usize = 255;
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct DirEntry {
+    pub is_dir: u8,
+    pub name: [u8; DIRENT_NAME_CAP],
+}
+
+impl DirEntry {
+    pub const fn empty() -> Self {
+        Self {
+            is_dir: 0,
+            name: [0; DIRENT_NAME_CAP],
+        }
+    }
+
+    pub fn new(is_dir: bool, name: &str) -> Self {
+        let mut entry = Self::empty();
+        entry.is_dir = is_dir as u8;
+        let name_bytes = name.as_bytes();
+        let copy_len = name_bytes.len().min(DIRENT_NAME_CAP - 1);
+        entry.name[..copy_len].copy_from_slice(&name_bytes[..copy_len]);
+        entry
+    }
+}
+
+pub trait VfsDirHandle: Send {
+    fn getdents(&mut self, buf: &mut [DirEntry]) -> usize;
 }
 
 pub enum SeekFrom {
@@ -89,6 +121,17 @@ pub fn get_file(path: &str) -> Result<Arc<Mutex<dyn VfsFile>>, ()> {
     for fs in MOUNT_TABLE.iter() {
         if path.starts_with(&fs.0) {
             if let Ok(res) = fs.1.file(&path[(fs.0.len() - 1)..]) {
+                return Ok(res);
+            }
+        }
+    }
+    Err(())
+}
+
+pub fn get_directory(path: &str) -> Result<Arc<Mutex<dyn VfsDirHandle>>, ()> {
+    for fs in MOUNT_TABLE.iter() {
+        if path.starts_with(&fs.0) {
+            if let Ok(res) = fs.1.directory(&path[(fs.0.len() - 1)..]) {
                 return Ok(res);
             }
         }

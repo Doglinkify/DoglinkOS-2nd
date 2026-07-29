@@ -208,6 +208,82 @@ pub fn sys_mount(typ: usize, disk: usize, part: usize, mountpoint: &str) {
     }
 }
 
+pub const DIRENT_NAME_CAP: usize = 255;
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct DirEntry {
+    pub is_dir: u8,
+    pub name: [u8; DIRENT_NAME_CAP],
+}
+
+impl DirEntry {
+    pub const fn empty() -> Self {
+        Self {
+            is_dir: 0,
+            name: [0; DIRENT_NAME_CAP],
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        let len = self
+            .name
+            .iter()
+            .position(|&x| x == 0)
+            .unwrap_or(DIRENT_NAME_CAP);
+        core::str::from_utf8(&self.name[..len]).unwrap_or("")
+    }
+
+    pub fn is_dir(&self) -> bool {
+        self.is_dir != 0
+    }
+}
+
+pub fn sys_opendir(path: &str) -> Option<usize> {
+    unsafe {
+        let res;
+        core::arch::asm!(
+            "int 0x80",
+            in("rax") 18,
+            in("rdi") path.as_ptr(),
+            in("rcx") path.len(),
+            out("rsi") res,
+        );
+        match res {
+            usize::MAX => None,
+            v => Some(v),
+        }
+    }
+}
+
+pub fn sys_getdents(fd: usize, entries: &mut [DirEntry]) -> Option<usize> {
+    unsafe {
+        let res;
+        core::arch::asm!(
+            "int 0x80",
+            in("rax") 19,
+            in("rsi") fd,
+            in("rdi") entries.as_mut_ptr(),
+            in("rcx") entries.len(),
+            out("r10") res,
+        );
+        match res {
+            usize::MAX => None,
+            v => Some(v),
+        }
+    }
+}
+
+pub fn sys_closedir(fd: usize) {
+    unsafe {
+        core::arch::asm!(
+            "int 0x80",
+            in("rax") 20,
+            in("rsi") fd,
+        );
+    }
+}
+
 #[macro_export]
 macro_rules! print {
     ($($arg:tt)*) => ($crate::_print(format_args!($($arg)*)));

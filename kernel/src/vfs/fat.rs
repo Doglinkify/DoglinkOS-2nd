@@ -1,5 +1,6 @@
-use super::{VfsDirectory, VfsFile};
+use super::{DirEntry, VfsDirHandle, VfsDirectory, VfsFile};
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use fatfs::{FileSystem, FsOptions, ReadWriteSeek};
 use spin::Mutex;
 
@@ -18,6 +19,11 @@ unsafe impl<T: ReadWriteSeek> Sync for WrappedFileSystem<T> {}
 
 pub struct WrappedFile<'a, T: ReadWriteSeek, TP, OCC>(fatfs::File<'a, T, TP, OCC>);
 
+pub struct SnapshotDirectory {
+    entries: Vec<DirEntry>,
+    offset: usize,
+}
+
 unsafe impl<'a, T: ReadWriteSeek, TP, OCC> Send for WrappedFile<'a, T, TP, OCC> {}
 
 impl<T: fatfs::ReadWriteSeek + Send> VfsDirectory for WrappedFileSystem<T> {
@@ -27,6 +33,23 @@ impl<T: fatfs::ReadWriteSeek + Send> VfsDirectory for WrappedFileSystem<T> {
             .open_file(path)
             .map_err(|_| ())
             .map(move |x| Arc::new(Mutex::new(WrappedFile(x))) as _)
+    }
+
+    fn directory(&self, path: &str) -> Result<Arc<Mutex<dyn VfsDirHandle + '_>>, ()> {
+        let dir = if path == "/" || path.is_empty() {
+            self.0.root_dir()
+        } else {
+            self.0.root_dir().open_dir(path).map_err(|_| ())?
+        };
+        let mut entries = Vec::new();
+        for entry in dir.iter() {
+            let entry = entry.map_err(|_| ())?;
+            entries.push(DirEntry::new(entry.is_dir(), &entry.file_name()));
+        }
+        Ok(Arc::new(Mutex::new(SnapshotDirectory {
+            entries,
+            offset: 0,
+        })))
     }
 
     fn create_file_or_open_existing(&self, path: &str) -> Result<Arc<Mutex<dyn VfsFile + '_>>, ()> {
@@ -39,6 +62,18 @@ impl<T: fatfs::ReadWriteSeek + Send> VfsDirectory for WrappedFileSystem<T> {
 
     fn remove(&self, path: &str) -> bool {
         self.0.root_dir().remove(path).is_ok()
+    }
+}
+
+impl VfsDirHandle for SnapshotDirectory {
+    fn getdents(&mut self, buf: &mut [DirEntry]) -> usize {
+        let mut written = 0;
+        while written < buf.len() && self.offset < self.entries.len() {
+            buf[written] = self.entries[self.offset];
+            self.offset += 1;
+            written += 1;
+        }
+        written
     }
 }
 

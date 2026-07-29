@@ -146,7 +146,8 @@ pub fn handle_mouse(packet: u8) {
                 if crate::stdio::tty_enabled() {
                     let mut terminal = crate::console::TERMINAL.lock();
                     terminal.handle_mouse(MouseInput::Scroll(y as isize));
-                    let echo = crate::console::ECHO_FLAG.load(core::sync::atomic::Ordering::Relaxed);
+                    let echo =
+                        crate::console::ECHO_FLAG.load(core::sync::atomic::Ordering::Relaxed);
                     while let Some(b) = crate::console::ECHO_BUFFER.pop() {
                         if echo {
                             if crate::stdio::serial_enabled()

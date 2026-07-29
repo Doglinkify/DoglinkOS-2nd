@@ -50,7 +50,7 @@ pub extern "x86-interrupt" fn syscall_handler(_: InterruptStackFrame) {
     )
 }
 
-const NUM_SYSCALLS: usize = 18;
+const NUM_SYSCALLS: usize = 21;
 
 const SYSCALL_TABLE: [fn(&mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_test,
@@ -71,6 +71,9 @@ const SYSCALL_TABLE: [fn(&mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_close,
     sys_remove,
     sys_mount,
+    sys_opendir,
+    sys_getdents,
+    sys_closedir,
 ];
 
 unsafe extern "C" fn do_syscall(args: *mut SyscallStackFrame) {
@@ -281,4 +284,41 @@ pub fn sys_mount(args: &mut SyscallStackFrame) {
         }
         _ => args.r10 = u64::MAX,
     }
+}
+
+pub fn sys_opendir(args: &mut SyscallStackFrame) {
+    let path = unsafe { core::str::from_raw_parts(args.rdi as *const u8, args.rcx as usize) };
+    let current = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
+    let mut tasks = crate::task::process::TASKS.lock();
+    let task = tasks[current].as_mut().unwrap();
+    if let Some((res, _)) = task.directories.iter().enumerate().find(|x| x.1.is_none()) {
+        if let Ok(directory) = crate::vfs::get_directory(path) {
+            task.directories[res] = Some(directory);
+            args.rsi = res as u64;
+        } else {
+            args.rsi = u64::MAX;
+        }
+    } else {
+        args.rsi = u64::MAX;
+    }
+}
+
+pub fn sys_getdents(args: &mut SyscallStackFrame) {
+    let current = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
+    let mut tasks = crate::task::process::TASKS.lock();
+    let task = tasks[current].as_mut().unwrap();
+    let buf = unsafe {
+        core::slice::from_raw_parts_mut(args.rdi as *mut crate::vfs::DirEntry, args.rcx as usize)
+    };
+    args.r10 = task.directories[args.rsi as usize]
+        .as_ref()
+        .map(|dir| dir.lock().getdents(buf) as u64)
+        .unwrap_or(u64::MAX);
+}
+
+pub fn sys_closedir(args: &mut SyscallStackFrame) {
+    let current = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
+    let mut tasks = crate::task::process::TASKS.lock();
+    let task = tasks[current].as_mut().unwrap();
+    task.directories[args.rsi as usize] = None;
 }

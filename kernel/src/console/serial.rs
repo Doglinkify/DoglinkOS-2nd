@@ -1,6 +1,4 @@
-use core::{
-    sync::atomic::{AtomicBool, Ordering},
-};
+use core::sync::atomic::{AtomicBool, Ordering};
 
 use x86_64::instructions::port::{PortReadOnly, PortWriteOnly};
 

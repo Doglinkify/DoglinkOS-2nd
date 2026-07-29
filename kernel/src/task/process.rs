@@ -53,6 +53,7 @@ pub struct Process<'a> {
     pub brk: u64,
     pub waiting_pid: Option<usize>,
     pub files: [Option<Arc<Mutex<dyn crate::vfs::VfsFile>>>; 64],
+    pub directories: [Option<Arc<Mutex<dyn crate::vfs::VfsDirHandle>>>; 64],
 }
 
 pub static ORIGINAL_KERNEL_CR3: Lazy<(PhysFrame, Cr3Flags)> = Lazy::new(Cr3::read);
@@ -106,6 +107,7 @@ impl Process<'_> {
             brk: 0,
             waiting_pid: None,
             files,
+            directories: [const { None }; 64],
         }
     }
 
@@ -192,6 +194,7 @@ impl Process<'_> {
             brk: self.brk,
             waiting_pid: None,
             files: self.files.clone(),
+            directories: self.directories.clone(),
         }
     }
 

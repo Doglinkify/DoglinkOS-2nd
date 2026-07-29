@@ -24,6 +24,32 @@ fn read_line(buf: &mut [u8]) -> usize {
     buf.len()
 }
 
+fn list_dir(path: &str) {
+    if let Some(fd) = sys_opendir(path) {
+        let mut entries = [DirEntry::empty(); 16];
+        loop {
+            let Some(count) = sys_getdents(fd, &mut entries) else {
+                println!("error while reading directory {path}");
+                break;
+            };
+            if count == 0 {
+                break;
+            }
+            for entry in &entries[..count] {
+                let name = entry.name();
+                if entry.is_dir() {
+                    println!("{name}/");
+                } else {
+                    println!("{name}");
+                }
+            }
+        }
+        sys_closedir(fd);
+    } else {
+        println!("directory {path} not found");
+    }
+}
+
 fn print_help() {
     println!("Builtin commands:");
     println!("  help               Show this help text");
@@ -39,6 +65,7 @@ fn print_help() {
     println!("  initrd-read        Read from /dev/initrd");
     println!("  file-read <path>   Print file contents");
     println!("  file-write <path>  Write lines to a file until EOF");
+    println!("  ls [path]          List directory entries");
     println!("  mount <args>       Mount a filesystem");
     println!("  file-rm            Remove /test.txt");
     println!("  beep <freq>        Play a beep");
@@ -174,6 +201,10 @@ fn shell_main_loop() {
             } else {
                 println!("error while opening {file_name}");
             }
+        } else if cmd == "ls" {
+            list_dir("/");
+        } else if let Some(path) = cmd.strip_prefix("ls ") {
+            list_dir(path);
         } else if let Some(params) = cmd.strip_prefix("mount ") {
             let mut it = params.split(' ');
             let typs = it.next().unwrap();

@@ -247,10 +247,7 @@ fn build_error(code: u8) -> [u8; 32] {
     buf
 }
 
-fn build_status_event(
-    phase: Phase,
-    ipv4: Option<&ppproto::Ipv4Status>,
-) -> [u8; 32] {
+fn build_status_event(phase: Phase, ipv4: Option<&ppproto::Ipv4Status>) -> [u8; 32] {
     let mut buf = [0u8; 32];
     buf[0] = EVT_STATUS;
     buf[1] = match phase {

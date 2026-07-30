@@ -357,7 +357,14 @@ pub fn sys_ipc_send(handle: usize, buf: &[u8]) -> isize {
 }
 
 pub fn sys_ipc_recv(handle: usize, buf: &mut [u8]) -> isize {
-    sys_ipc(IPC_CMD_RECV, handle, buf.as_mut_ptr() as usize, buf.len(), 0, 0)
+    sys_ipc(
+        IPC_CMD_RECV,
+        handle,
+        buf.as_mut_ptr() as usize,
+        buf.len(),
+        0,
+        0,
+    )
 }
 
 pub fn sys_ipc_close(handle: usize) -> isize {

@@ -87,7 +87,7 @@ fn main() {
     loop {
         while let Some(handle) = sys_ipc_accept(listener) {
             let status = build_status_event(ppp.status().phase, ppp.status().ipv4.as_ref());
-            let _ = sys_ipc_send(handle, &status, 0);
+            let _ = sys_ipc_send(handle, &status);
             clients.push(handle);
         }
 
@@ -134,7 +134,7 @@ fn main() {
         let mut idx = 0;
         while idx < clients.len() {
             let handle = clients[idx];
-            let recv_len = sys_ipc_recv(handle, &mut ipc_buf, IPC_FLAG_NONBLOCK);
+            let recv_len = sys_ipc_recv(handle, &mut ipc_buf);
             if recv_len == IPC_EAGAIN {
                 idx += 1;
                 continue;
@@ -149,7 +149,7 @@ fn main() {
                 process_client_request(&mut ppp, &ipc_buf[..recv_len as usize], &mut tx_buf);
             match reply {
                 ClientReply::Immediate(buf) => {
-                    if sys_ipc_send(handle, &buf, 0) < 0 {
+                    if sys_ipc_send(handle, &buf) < 0 {
                         let _ = sys_ipc_close(handle);
                         clients.swap_remove(idx);
                         continue;
@@ -158,7 +158,7 @@ fn main() {
                 ClientReply::Transmit(len) => {
                     write_raw(serial_fd, &tx_buf[..len]);
                     let ack = build_ack(0);
-                    if sys_ipc_send(handle, &ack, 0) < 0 {
+                    if sys_ipc_send(handle, &ack) < 0 {
                         let _ = sys_ipc_close(handle);
                         clients.swap_remove(idx);
                         continue;
@@ -224,7 +224,7 @@ fn broadcast(clients: &mut Vec<usize>, payload: &[u8]) {
     let mut idx = 0;
     while idx < clients.len() {
         let handle = clients[idx];
-        if sys_ipc_send(handle, payload, 0) < 0 {
+        if sys_ipc_send(handle, payload) < 0 {
             let _ = sys_ipc_close(handle);
             clients.swap_remove(idx);
         } else {

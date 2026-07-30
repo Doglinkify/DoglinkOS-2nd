@@ -299,8 +299,6 @@ pub fn sys_closedir(fd: usize) {
     }
 }
 
-pub const IPC_FLAG_NONBLOCK: usize = 1;
-
 pub const IPC_CMD_CREATE: usize = 0;
 pub const IPC_CMD_SEND: usize = 1;
 pub const IPC_CMD_RECV: usize = 2;
@@ -335,7 +333,7 @@ pub fn sys_ipc(
     ret
 }
 
-pub fn sys_ipc_create(flags: usize) -> Option<(usize, usize)> {
+pub fn sys_ipc_create() -> Option<(usize, usize)> {
     let left: isize;
     let right: usize;
     unsafe {
@@ -343,7 +341,6 @@ pub fn sys_ipc_create(flags: usize) -> Option<(usize, usize)> {
             "int 0x80",
             in("rax") 21,
             in("rdi") IPC_CMD_CREATE,
-            in("rsi") flags,
             lateout("rax") left,
             lateout("rdx") right,
         );
@@ -355,26 +352,12 @@ pub fn sys_ipc_create(flags: usize) -> Option<(usize, usize)> {
     }
 }
 
-pub fn sys_ipc_send(handle: usize, buf: &[u8], flags: usize) -> isize {
-    sys_ipc(
-        IPC_CMD_SEND,
-        handle,
-        buf.as_ptr() as usize,
-        buf.len(),
-        flags,
-        0,
-    )
+pub fn sys_ipc_send(handle: usize, buf: &[u8]) -> isize {
+    sys_ipc(IPC_CMD_SEND, handle, buf.as_ptr() as usize, buf.len(), 0, 0)
 }
 
-pub fn sys_ipc_recv(handle: usize, buf: &mut [u8], flags: usize) -> isize {
-    sys_ipc(
-        IPC_CMD_RECV,
-        handle,
-        buf.as_mut_ptr() as usize,
-        buf.len(),
-        flags,
-        0,
-    )
+pub fn sys_ipc_recv(handle: usize, buf: &mut [u8]) -> isize {
+    sys_ipc(IPC_CMD_RECV, handle, buf.as_mut_ptr() as usize, buf.len(), 0, 0)
 }
 
 pub fn sys_ipc_close(handle: usize) -> isize {

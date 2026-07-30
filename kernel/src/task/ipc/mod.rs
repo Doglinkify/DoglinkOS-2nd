@@ -13,8 +13,6 @@ pub const IPC_MAX_HANDLES: usize = 64;
 pub const IPC_MAX_MSG_SIZE: usize = 4096;
 pub const IPC_QUEUE_DEPTH: usize = 16;
 
-pub const IPC_FLAG_NONBLOCK: usize = 1;
-
 pub const IPC_CMD_CREATE: usize = 0;
 pub const IPC_CMD_SEND: usize = 1;
 pub const IPC_CMD_RECV: usize = 2;
@@ -120,7 +118,6 @@ pub fn syscall(args: &mut ProcessContext) {
 }
 
 fn sys_create(args: &mut ProcessContext) -> isize {
-    let _flags = args.rsi as usize;
     let channel = Arc::new(Mutex::new(IpcChannel::new()));
     let handle0 = new_channel_handle(channel.clone(), 0);
     let handle1 = new_channel_handle(channel, 1);
@@ -147,7 +144,6 @@ fn sys_send(args: &mut ProcessContext) -> isize {
     let handle_id = args.rsi as usize;
     let ptr = args.rdx as *const u8;
     let len = args.rcx as usize;
-    let _flags = args.r8 as usize;
     if len > IPC_MAX_MSG_SIZE {
         return IPC_EMSGSIZE;
     }
@@ -172,7 +168,6 @@ fn sys_recv(args: &mut ProcessContext) -> isize {
     let handle_id = args.rsi as usize;
     let ptr = args.rdx as *mut u8;
     let len = args.rcx as usize;
-    let _flags = args.r8 as usize;
     let Some((channel, side)) = current_handle(handle_id) else {
         return IPC_EBADF;
     };

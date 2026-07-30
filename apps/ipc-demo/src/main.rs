@@ -3,13 +3,12 @@
 
 use dlos_app_rt::*;
 
-const IPC_FLAG_NONBLOCK: usize = 1;
 const IPC_EAGAIN: isize = -11;
 const NAMED_CHANNEL: &str = "ipc-demo.named";
 
 fn recv_poll(handle: usize, buf: &mut [u8]) -> isize {
     loop {
-        let recv_len = sys_ipc_recv(handle, buf, IPC_FLAG_NONBLOCK);
+        let recv_len = sys_ipc_recv(handle, buf);
         if recv_len != IPC_EAGAIN {
             return recv_len;
         }
@@ -17,7 +16,7 @@ fn recv_poll(handle: usize, buf: &mut [u8]) -> isize {
     }
 }
 
-fn connect_blocking(name: &str) -> usize {
+fn connect_poll(name: &str) -> usize {
     loop {
         if let Some(handle) = sys_ipc_connect(name) {
             return handle;
@@ -26,7 +25,7 @@ fn connect_blocking(name: &str) -> usize {
     }
 }
 
-fn accept_blocking(listener: usize) -> usize {
+fn accept_poll(listener: usize) -> usize {
     loop {
         if let Some(handle) = sys_ipc_accept(listener) {
             return handle;
@@ -36,7 +35,7 @@ fn accept_blocking(listener: usize) -> usize {
 }
 
 fn run_named_client(client_id: usize) -> ! {
-    let handle = connect_blocking(NAMED_CHANNEL);
+    let handle = connect_poll(NAMED_CHANNEL);
     println!("ipc-demo client {client_id} connected");
 
     let mut outbound = [0u8; 32];
@@ -46,7 +45,7 @@ fn run_named_client(client_id: usize) -> ! {
         outbound[msg.len()] = b'0' + client_id as u8;
         msg.len() + 1
     };
-    let send_len = sys_ipc_send(handle, &outbound[..outbound_len], 0);
+    let send_len = sys_ipc_send(handle, &outbound[..outbound_len]);
     if send_len < 0 {
         eprintln!("ipc-demo client {client_id}: send failed {}", send_len);
     }
@@ -72,7 +71,7 @@ fn run_named_server() -> ! {
     println!("ipc-demo server listening on {NAMED_CHANNEL}");
 
     for client_id in 1..=3 {
-        let conn = accept_blocking(listener);
+        let conn = accept_poll(listener);
         let mut buf = [0u8; 128];
         let recv_len = recv_poll(conn, &mut buf);
         if recv_len < 0 {
@@ -89,7 +88,7 @@ fn run_named_server() -> ! {
             reply[..prefix.len()].copy_from_slice(prefix);
             reply[prefix.len()] = b'0' + client_id as u8;
             let reply_len = prefix.len() + 1;
-            let send_len = sys_ipc_send(conn, &reply[..reply_len], 0);
+            let send_len = sys_ipc_send(conn, &reply[..reply_len]);
             if send_len < 0 {
                 eprintln!(
                     "ipc-demo server: reply to client {client_id} failed {}",
@@ -106,7 +105,7 @@ fn run_named_server() -> ! {
 
 #[unsafe(no_mangle)]
 extern "C" fn _start() -> ! {
-    let Some((parent_end, child_end)) = sys_ipc_create(0) else {
+    let Some((parent_end, child_end)) = sys_ipc_create() else {
         eprintln!("ipc-demo: ipc_create failed");
         sys_exit();
     };
@@ -124,7 +123,7 @@ extern "C" fn _start() -> ! {
             println!("ipc-demo child received: {msg}");
 
             let reply = b"hello from child";
-            let send_len = sys_ipc_send(child_end, reply, 0);
+            let send_len = sys_ipc_send(child_end, reply);
             if send_len < 0 {
                 eprintln!("ipc-demo child: send failed {}", send_len);
             } else {
@@ -139,7 +138,7 @@ extern "C" fn _start() -> ! {
     let _ = sys_ipc_close(child_end);
 
     let msg = b"hello from parent";
-    let send_len = sys_ipc_send(parent_end, msg, 0);
+    let send_len = sys_ipc_send(parent_end, msg);
     if send_len < 0 {
         eprintln!("ipc-demo parent: send failed {}", send_len);
     } else {

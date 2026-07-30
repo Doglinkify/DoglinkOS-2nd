@@ -28,7 +28,7 @@ pub fn main(mut cnt: usize) {
         let msg_len = recv_poll(handle, &mut buf) as usize;
         let msg = &mut buf[..msg_len];
         match msg[0] {
-            0x81 => handle_inbound_ipv4(&msg[1..]),
+            0x81 => handle_inbound_ipv4(&msg[1..], handle),
             0x82 => handle_status(&msg),
             _ => continue,
         }
@@ -39,10 +39,10 @@ pub fn main(mut cnt: usize) {
     }
 }
 
-fn print_ipv4_header(packet: &[u8]) {
+fn print_ipv4_header(packet: &[u8]) -> Option<usize> {
     if packet.len() < 20 {
         println!("Error: packet too short for IPv4 header");
-        return;
+        return None;
     }
 
     let version_ihl = packet[0];
@@ -51,17 +51,17 @@ fn print_ipv4_header(packet: &[u8]) {
 
     if version != 4 {
         println!("Error: not IPv4 (version={})", version);
-        return;
+        return None;
     }
     if ihl < 5 {
         println!("Error: invalid IHL ({})", ihl);
-        return;
+        return None;
     }
 
     let header_len = (ihl as usize) * 4;
     if packet.len() < header_len {
         println!("Error: packet length less than header length");
-        return;
+        return None;
     }
 
     // Version & IHL
@@ -136,6 +136,8 @@ fn print_ipv4_header(packet: &[u8]) {
     } else {
         println!("Payload: (none)");
     }
+
+    Some(payload_start)
 }
 
 fn print_ipv4_addr(addr: &[u8]) {
@@ -146,9 +148,18 @@ fn print_ipv4_addr(addr: &[u8]) {
     }
 }
 
-fn handle_inbound_ipv4(packet: &[u8]) {
+pub fn send_ipv4(packet: &[u8], handle: usize) {
+    let mut buf = [0u8; 4096];
+    buf[0] = 1;
+    buf[1..(packet.len() + 1)].copy_from_slice(packet);
+    sys_ipc_send(handle, &buf[..packet.len() + 1]);
+}
+
+fn handle_inbound_ipv4(packet: &[u8], handle: usize) {
     println!("---------- BEGIN IPV4 PACKET ----------");
-    print_ipv4_header(packet);
+    if let Some(payload_start) = print_ipv4_header(packet) {
+        crate::icmp::try_handle_ping(packet, payload_start, handle);
+    }
     println!("----------- END IPV4 PACKET -----------");
 }
 

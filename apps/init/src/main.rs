@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 
+mod icmp;
 mod netdump;
 
 use dlos_app_rt::*;

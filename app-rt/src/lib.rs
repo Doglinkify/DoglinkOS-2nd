@@ -154,6 +154,21 @@ pub fn sys_read2(fd: usize, buf: &mut [u8]) {
     }
 }
 
+pub fn sys_read3(fd: usize, buf: &mut [u8]) -> usize {
+    unsafe {
+        let res;
+        core::arch::asm!(
+            "int 0x80",
+            in("rax") 22,
+            in("rsi") fd,
+            in("rdi") buf.as_mut_ptr(),
+            in("rcx") buf.len(),
+            out("r10") res,
+        );
+        res
+    }
+}
+
 pub const SEEK_CUR: usize = 0;
 pub const SEEK_END: usize = 1;
 pub const SEEK_SET: usize = 2;

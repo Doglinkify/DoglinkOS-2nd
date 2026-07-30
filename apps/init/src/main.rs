@@ -87,6 +87,7 @@ fn print_help() {
         "  imgview            Draw an image on the framebuffer (can mess up the terminal and become hard to clear)"
     );
     println!("  ipc-demo           Fork + bidirectional anonymous IPC test");
+    println!("  upppd              PPPoS user-space network service over /dev/serial");
 }
 
 fn shell_main_loop() {
@@ -258,7 +259,7 @@ fn shell_main_loop() {
                 sys_exec(unsafe { core::str::from_utf8_unchecked(&buf2[..len2]) });
                 eprintln!("unknown command");
                 sys_exit();
-            } else {
+            } else if cmd != "upppd" {
                 sys_waitpid(fork_result);
             }
         }

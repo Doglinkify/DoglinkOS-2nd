@@ -50,7 +50,7 @@ pub extern "x86-interrupt" fn syscall_handler(_: InterruptStackFrame) {
     )
 }
 
-const NUM_SYSCALLS: usize = 22;
+const NUM_SYSCALLS: usize = 23;
 
 const SYSCALL_TABLE: [fn(&mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_test,
@@ -75,6 +75,7 @@ const SYSCALL_TABLE: [fn(&mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_getdents,
     sys_closedir,
     sys_ipc,
+    sys_read3,
 ];
 
 unsafe extern "C" fn do_syscall(args: *mut SyscallStackFrame) {
@@ -226,6 +227,18 @@ pub fn sys_read2(args: &mut SyscallStackFrame) {
         .unwrap()
         .lock()
         .read_exact(buf);
+}
+
+pub fn sys_read3(args: &mut SyscallStackFrame) {
+    let buf = unsafe { core::slice::from_raw_parts_mut(args.rdi as *mut u8, args.rcx as usize) };
+    let current = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
+    let mut tasks = crate::task::process::TASKS.lock();
+    let task = tasks[current].as_mut().unwrap();
+    args.r10 = task.files[args.rsi as usize]
+        .as_ref()
+        .unwrap()
+        .lock()
+        .read(buf) as u64;
 }
 
 pub fn sys_seek(args: &mut SyscallStackFrame) {

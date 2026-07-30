@@ -50,9 +50,9 @@ struct Args {
     #[argh(description = "PS/2 special cases")]
     ps2_special: usize,
 
-    #[argh(switch, short = 'S')]
-    #[argh(description = "enable stdio serial")]
-    serial: bool,
+    #[argh(option, short = 'S')]
+    #[argh(description = "serial option passed to qemu")]
+    serial: Option<String>,
 }
 
 fn main() {
@@ -126,8 +126,8 @@ fn main() {
             }
             _ => {}
         }
-        if args.serial {
-            cmd.arg("-serial").arg("stdio");
+        if let Some(opt) = args.serial {
+            cmd.arg("-serial").arg(opt);
         }
 
         let mut child = cmd.spawn().unwrap();
@@ -140,6 +140,7 @@ fn build_img() -> PathBuf {
     let t_path = Path::new(env!("CARGO_BIN_FILE_INFINITE_LOOP"));
     let imgview_path = Path::new(env!("CARGO_BIN_FILE_IMGVIEW"));
     let ipc_demo_path = Path::new(env!("CARGO_BIN_FILE_IPC_DEMO"));
+    let upppd_path = Path::new(env!("CARGO_BIN_FILE_UPPPD"));
 
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let assets_dir = manifest_dir.join("assets");
@@ -155,6 +156,7 @@ fn build_img() -> PathBuf {
         ("/bin/huge-alloc-test", assets_dir.join("huge_alloc.elf")),
         ("/bin/imgview", imgview_path.to_path_buf()),
         ("/bin/ipc-demo", ipc_demo_path.to_path_buf()),
+        ("/bin/upppd", upppd_path.to_path_buf()),
         ("/res/test.jpg", assets_dir.join("test.jpg")),
         ("/res/test2.jpg", assets_dir.join("test2.jpg")),
         ("/res/test2.png", assets_dir.join("test2.png")),

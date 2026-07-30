@@ -1,6 +1,8 @@
 #![no_std]
 #![no_main]
 
+mod netdump;
+
 use dlos_app_rt::*;
 
 struct Globals {
@@ -71,6 +73,7 @@ fn print_help() {
     println!("  beep <freq>        Play a beep");
     println!("  poweroff           Power off the machine");
     println!("  reboot             Reboot the machine");
+    println!("  netdump            Dump recieved packets from upppd");
     println!();
     println!("External commands:");
     println!("  /bin/<name>        Execute a command from /bin");
@@ -244,6 +247,11 @@ fn shell_main_loop() {
             } else {
                 println!("error while opening /dev/power");
             }
+        } else if let Some(cnt) = cmd
+            .strip_prefix("netdump")
+            .map(|x| x.trim().parse().unwrap_or(4))
+        {
+            netdump::main(cnt);
         } else {
             let mut buf2 = [0u8; 128];
             let len2 = if buf[0] != b'/' {

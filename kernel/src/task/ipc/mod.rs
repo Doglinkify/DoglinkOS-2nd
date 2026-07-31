@@ -11,7 +11,7 @@ use spin::{Lazy, Mutex};
 
 pub const IPC_MAX_HANDLES: usize = 64;
 pub const IPC_MAX_MSG_SIZE: usize = 4096;
-pub const IPC_QUEUE_DEPTH: usize = 16;
+pub const IPC_QUEUE_DEPTH: usize = 4096;
 
 pub const IPC_CMD_CREATE: usize = 0;
 pub const IPC_CMD_SEND: usize = 1;

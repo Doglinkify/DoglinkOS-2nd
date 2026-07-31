@@ -41,12 +41,7 @@ fn received() -> bool {
 /// Non-blocking read
 pub fn read() -> Option<u8> {
     if received() {
-        let mut res = unsafe { inb(PORT) };
-        if res == 0x0d {
-            // translate CR to LF
-            res = 0x0a;
-        }
-        Some(res)
+        Some(unsafe { inb(PORT) })
     } else {
         None
     }

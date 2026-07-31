@@ -82,8 +82,12 @@ fn read_serial() -> Option<u8> {
     if !serial::SERIAL_OK.load(Ordering::Relaxed) {
         return None;
     }
-    let res = serial::read();
-    if let Some(b) = res {
+    let mut res = serial::read();
+    if let Some(mut b) = res {
+        if b == b'\r' {
+            b = b'\n';
+            res = Some(b);
+        }
         if ECHO_FLAG.load(Ordering::Relaxed) {
             serial::write(b);
             if tty_enabled() {

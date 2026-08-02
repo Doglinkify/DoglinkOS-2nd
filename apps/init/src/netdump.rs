@@ -29,7 +29,7 @@ pub fn main(mut cnt: usize) {
         let msg = &mut buf[..msg_len];
         match msg[0] {
             0x81 => handle_inbound_ipv4(&msg[1..], handle),
-            0x82 => handle_status(&msg),
+            0x82 => handle_status(msg),
             _ => continue,
         }
         cnt -= 1;

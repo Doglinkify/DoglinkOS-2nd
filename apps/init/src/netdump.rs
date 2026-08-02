@@ -156,10 +156,9 @@ pub fn send_ipv4(packet: &[u8], handle: usize) {
 }
 
 fn handle_inbound_ipv4(packet: &[u8], handle: usize) {
+    crate::icmp::try_handle_ping(packet, handle);
     println!("---------- BEGIN IPV4 PACKET ----------");
-    if let Some(payload_start) = print_ipv4_header(packet) {
-        crate::icmp::try_handle_ping(packet, payload_start, handle);
-    }
+    print_ipv4_header(packet);
     println!("----------- END IPV4 PACKET -----------");
 }
 

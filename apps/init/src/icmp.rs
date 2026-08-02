@@ -19,12 +19,15 @@ fn compute_checksum(data: &[u8]) -> u16 {
     !(sum as u16)
 }
 
-pub fn try_handle_ping(packet: &[u8], payload_start: usize, handle: usize) {
+pub fn try_handle_ping(packet: &[u8], handle: usize) {
+    let version_ihl = packet[0];
+    let ihl = version_ihl & 0x0F;
+    let payload_start = (ihl * 4) as usize;
+
     if packet.len() < payload_start + 8 {
         return;
     }
 
-    let version_ihl = packet[0];
     let version = version_ihl >> 4;
     if version != 4 {
         return;

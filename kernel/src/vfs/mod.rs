@@ -89,6 +89,29 @@ pub trait VfsDirHandle: Send {
     fn getdents(&mut self, buf: &mut [DirEntry]) -> usize;
 }
 
+pub struct SnapshotDirectory {
+    entries: Vec<DirEntry>,
+    offset: usize,
+}
+
+impl SnapshotDirectory {
+    pub fn new(entries: Vec<DirEntry>) -> Self {
+        Self { entries, offset: 0 }
+    }
+}
+
+impl VfsDirHandle for SnapshotDirectory {
+    fn getdents(&mut self, buf: &mut [DirEntry]) -> usize {
+        let mut written = 0;
+        while written < buf.len() && self.offset < self.entries.len() {
+            buf[written] = self.entries[self.offset];
+            self.offset += 1;
+            written += 1;
+        }
+        written
+    }
+}
+
 pub enum SeekFrom {
     Start(usize),
     End(isize),

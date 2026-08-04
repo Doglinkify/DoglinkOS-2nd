@@ -1,16 +1,10 @@
 use alloc::sync::Arc;
 use alloc::vec;
-use alloc::vec::Vec;
 use spin::Mutex;
 
-use crate::vfs::{DirEntry, VfsDirHandle, VfsDirectory, VfsFile};
+use crate::vfs::{DirEntry, SnapshotDirectory, VfsDirHandle, VfsDirectory, VfsFile};
 
 pub(super) struct DevFileSystem;
-
-struct DevDirectory {
-    entries: Vec<DirEntry>,
-    offset: usize,
-}
 
 impl VfsDirectory for DevFileSystem {
     fn file(&self, path: &str) -> Result<Arc<Mutex<dyn VfsFile + '_>>, ()> {
@@ -68,7 +62,7 @@ impl VfsDirectory for DevFileSystem {
             }
         }
 
-        Ok(Arc::new(Mutex::new(DevDirectory { entries, offset: 0 })))
+        Ok(Arc::new(Mutex::new(SnapshotDirectory::new(entries))))
     }
 
     fn create_file_or_open_existing(&self, path: &str) -> Result<Arc<Mutex<dyn VfsFile + '_>>, ()> {
@@ -77,17 +71,5 @@ impl VfsDirectory for DevFileSystem {
 
     fn remove(&self, _path: &str) -> bool {
         false
-    }
-}
-
-impl VfsDirHandle for DevDirectory {
-    fn getdents(&mut self, buf: &mut [DirEntry]) -> usize {
-        let mut written = 0;
-        while written < buf.len() && self.offset < self.entries.len() {
-            buf[written] = self.entries[self.offset];
-            self.offset += 1;
-            written += 1;
-        }
-        written
     }
 }

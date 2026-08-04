@@ -2,17 +2,11 @@ use alloc::format;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec;
-use alloc::vec::Vec;
 use spin::Mutex;
 
-use crate::vfs::{DirEntry, SeekFrom, VfsDirHandle, VfsDirectory, VfsFile};
+use crate::vfs::{DirEntry, SeekFrom, SnapshotDirectory, VfsDirHandle, VfsDirectory, VfsFile};
 
 pub(super) struct ProcFileSystem;
-
-struct ProcDirectory {
-    entries: Vec<DirEntry>,
-    offset: usize,
-}
 
 struct ProcTextFile {
     data: String,
@@ -58,7 +52,7 @@ impl VfsDirectory for ProcFileSystem {
                     entries.push(DirEntry::new(true, &format!("{pid}")));
                 }
             }
-            return Ok(Arc::new(Mutex::new(ProcDirectory { entries, offset: 0 })));
+            return Ok(Arc::new(Mutex::new(SnapshotDirectory::new(entries))));
         }
 
         let pid = split_process_dir_path(path)?;
@@ -67,10 +61,9 @@ impl VfsDirectory for ProcFileSystem {
             return Err(());
         }
 
-        Ok(Arc::new(Mutex::new(ProcDirectory {
-            entries: vec![DirEntry::new(false, "exe")],
-            offset: 0,
-        })))
+        Ok(Arc::new(Mutex::new(SnapshotDirectory::new(vec![DirEntry::new(
+            false, "exe",
+        )]))))
     }
 
     fn create_file_or_open_existing(&self, _path: &str) -> Result<Arc<Mutex<dyn VfsFile + '_>>, ()> {
@@ -79,18 +72,6 @@ impl VfsDirectory for ProcFileSystem {
 
     fn remove(&self, _path: &str) -> bool {
         false
-    }
-}
-
-impl VfsDirHandle for ProcDirectory {
-    fn getdents(&mut self, buf: &mut [DirEntry]) -> usize {
-        let mut written = 0;
-        while written < buf.len() && self.offset < self.entries.len() {
-            buf[written] = self.entries[self.offset];
-            self.offset += 1;
-            written += 1;
-        }
-        written
     }
 }
 

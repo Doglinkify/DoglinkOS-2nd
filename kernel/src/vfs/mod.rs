@@ -1,5 +1,6 @@
 mod devfs;
 mod fat;
+mod procfs;
 
 pub use fat::get_fs as get_fat_fs;
 
@@ -106,6 +107,7 @@ pub fn init() {
     Lazy::force(&MOUNT_TABLE);
     mount(Some(disk), "/", self::fat::get_fs);
     mount(None::<RamDisk>, "/dev/", self::devfs::get_fs);
+    mount(None::<RamDisk>, "/proc/", self::procfs::get_fs);
 }
 
 pub fn mount<T>(device: Option<T>, path: &str, fs: fn(Option<T>) -> Arc<dyn VfsDirectory>)

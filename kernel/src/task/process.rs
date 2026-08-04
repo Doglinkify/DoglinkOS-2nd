@@ -1,6 +1,7 @@
 use crate::mm::page_alloc::alloc_physical_page;
 use crate::mm::phys_to_virt;
 use crate::task::ipc::{self, IpcHandle};
+use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::cmp::max;
@@ -66,6 +67,7 @@ pub struct Process<'a> {
     pub tm: u64,
     pub fs: VirtAddr,
     pub brk: u64,
+    pub exe_path: Option<String>,
     pub state: ProcessState,
     pub files: [Option<Arc<Mutex<dyn crate::vfs::VfsFile>>>; 64],
     pub directories: [Option<Arc<Mutex<dyn crate::vfs::VfsDirHandle>>>; 64],
@@ -123,6 +125,7 @@ impl Process<'_> {
             tm: 10,
             fs: VirtAddr::new(0),
             brk: 0,
+            exe_path: None,
             state: ProcessState::Runnable,
             files,
             directories: [const { None }; 64],
@@ -211,6 +214,7 @@ impl Process<'_> {
             tm: 0,
             fs: VirtAddr::new(0),
             brk: self.brk,
+            exe_path: self.exe_path.clone(),
             state: ProcessState::Runnable,
             files: self.files.clone(),
             directories: self.directories.clone(),
@@ -299,6 +303,7 @@ pub fn do_exec(args: &mut ProcessContext) {
         current_task.fpu_state = FPU_INIT;
         current_task.fs = VirtAddr::zero();
         current_task.brk = 0;
+        current_task.exe_path = Some(path.into());
         current_task.state = ProcessState::Runnable;
         let mut buf = alloc::vec![0u8; size];
         elf_file.read_exact(buf.as_mut_slice());

@@ -197,16 +197,16 @@ pub fn sys_info(args: &mut SyscallStackFrame) {
 pub fn sys_open(args: &mut SyscallStackFrame) {
     let path = unsafe { core::str::from_raw_parts(args.rdi as *const u8, args.rcx as usize) };
     let do_create = args.r10 != 0;
-    let current = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
-    let mut tasks = crate::task::process::TASKS.lock();
-    let task = tasks[current].as_mut().unwrap();
-    if let Some((res, _)) = task.files.iter().enumerate().find(|x| x.1.is_none()) {
-        let tmp = if do_create {
-            crate::vfs::create_file_or_open_existing(path).ok()
-        } else {
-            crate::vfs::get_file(path).ok()
-        };
-        if let Some(file) = tmp {
+    let tmp = if do_create {
+        crate::vfs::create_file_or_open_existing(path).ok()
+    } else {
+        crate::vfs::get_file(path).ok()
+    };
+    if let Some(file) = tmp {
+        let current = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
+        let mut tasks = crate::task::process::TASKS.lock();
+        let task = tasks[current].as_mut().unwrap();
+        if let Some((res, _)) = task.files.iter().enumerate().find(|x| x.1.is_none()) {
             task.files[res] = Some(file);
             args.rsi = res as u64;
         } else {
@@ -299,11 +299,11 @@ pub fn sys_mount(args: &mut SyscallStackFrame) {
 
 pub fn sys_opendir(args: &mut SyscallStackFrame) {
     let path = unsafe { core::str::from_raw_parts(args.rdi as *const u8, args.rcx as usize) };
-    let current = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
-    let mut tasks = crate::task::process::TASKS.lock();
-    let task = tasks[current].as_mut().unwrap();
-    if let Some((res, _)) = task.directories.iter().enumerate().find(|x| x.1.is_none()) {
-        if let Ok(directory) = crate::vfs::get_directory(path) {
+    if let Ok(directory) = crate::vfs::get_directory(path) {
+        let current = crate::task::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
+        let mut tasks = crate::task::process::TASKS.lock();
+        let task = tasks[current].as_mut().unwrap();
+        if let Some((res, _)) = task.directories.iter().enumerate().find(|x| x.1.is_none()) {
             task.directories[res] = Some(directory);
             args.rsi = res as u64;
         } else {

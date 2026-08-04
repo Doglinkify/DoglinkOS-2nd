@@ -1,6 +1,7 @@
 use crate::mm::page_alloc::alloc_physical_page;
 use crate::mm::phys_to_virt;
 use crate::task::ipc::{self, IpcHandle};
+use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -291,8 +292,9 @@ pub fn do_exec(args: &mut ProcessContext) {
     let path = unsafe {
         let slice = core::slice::from_raw_parts(args.rdi as *const _, args.rcx as usize);
         core::str::from_utf8(slice).unwrap()
-    };
-    if let Ok(elf_file_lock) = crate::vfs::get_file(path) {
+    }
+    .to_owned();
+    if let Ok(elf_file_lock) = crate::vfs::get_file(&path) {
         let mut elf_file = elf_file_lock.lock();
         let size = elf_file.size();
         let c_tid = super::sched::CURRENT_TASK_ID.load(Ordering::Relaxed);
@@ -303,7 +305,7 @@ pub fn do_exec(args: &mut ProcessContext) {
         current_task.fpu_state = FPU_INIT;
         current_task.fs = VirtAddr::zero();
         current_task.brk = 0;
-        current_task.exe_path = Some(path.into());
+        current_task.exe_path = Some(path);
         current_task.state = ProcessState::Runnable;
         let mut buf = alloc::vec![0u8; size];
         elf_file.read_exact(buf.as_mut_slice());

@@ -61,12 +61,15 @@ impl VfsDirectory for ProcFileSystem {
             return Err(());
         }
 
-        Ok(Arc::new(Mutex::new(SnapshotDirectory::new(vec![DirEntry::new(
-            false, "exe",
-        )]))))
+        Ok(Arc::new(Mutex::new(SnapshotDirectory::new(vec![
+            DirEntry::new(false, "exe"),
+        ]))))
     }
 
-    fn create_file_or_open_existing(&self, _path: &str) -> Result<Arc<Mutex<dyn VfsFile + '_>>, ()> {
+    fn create_file_or_open_existing(
+        &self,
+        _path: &str,
+    ) -> Result<Arc<Mutex<dyn VfsFile + '_>>, ()> {
         Err(())
     }
 

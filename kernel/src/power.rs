@@ -10,7 +10,7 @@ pub fn poweroff() -> ! {
         .get_by_path(&AmlName::from_str("\\_S5").unwrap())
         .unwrap()
     {
-        aml::AmlValue::Package(ref values) => values[0].as_integer(&aml_context).unwrap() as u16,
+        aml::AmlValue::Package(values) => values[0].as_integer(&aml_context).unwrap() as u16,
         _ => unreachable!(),
     };
     loop {

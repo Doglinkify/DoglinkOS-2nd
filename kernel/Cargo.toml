@@ -1,7 +1,7 @@
 [package]
 name = "DoglinkOS-2nd"
 version = "1.4.1"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 good_memory_allocator = "0.1.7"

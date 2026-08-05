@@ -1,9 +1,6 @@
 #![no_std]
 #![no_main]
 
-use core::arch::asm;
-use limine::BaseRevision;
-use limine::{RequestsEndMarker, RequestsStartMarker};
 use DoglinkOS_2nd::acpi::parse_madt;
 use DoglinkOS_2nd::apic::{io::init as init_ioapic, local::init as init_lapic};
 use DoglinkOS_2nd::blockdev::ahci::init as init_ahci;
@@ -18,21 +15,24 @@ use DoglinkOS_2nd::pcie::enumrate::doit;
 use DoglinkOS_2nd::println;
 use DoglinkOS_2nd::task::{init as init_task, init_sse, reset_gdt};
 use DoglinkOS_2nd::vfs::init as init_vfs;
+use core::arch::asm;
+use limine::BaseRevision;
+use limine::{RequestsEndMarker, RequestsStartMarker};
 
 #[used]
-#[link_section = ".requests"]
+#[unsafe(link_section = ".requests")]
 static BASE_REVISION: BaseRevision = BaseRevision::with_revision(2);
 
 /// Define the stand and end markers for Limine requests.
 #[used]
-#[link_section = ".requests_start_marker"]
+#[unsafe(link_section = ".requests_start_marker")]
 static _START_MARKER: RequestsStartMarker = RequestsStartMarker::new();
 
 #[used]
-#[link_section = ".requests_end_marker"]
+#[unsafe(link_section = ".requests_end_marker")]
 static _END_MARKER: RequestsEndMarker = RequestsEndMarker::new();
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn kmain() -> ! {
     assert!(BASE_REVISION.is_supported());
     init_mm();

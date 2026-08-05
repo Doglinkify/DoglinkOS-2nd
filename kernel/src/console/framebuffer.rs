@@ -3,7 +3,7 @@ use limine::request::FramebufferRequest;
 use os_terminal::{DrawTarget, Rgb};
 
 #[used]
-#[link_section = ".requests"]
+#[unsafe(link_section = ".requests")]
 pub static FRAMEBUFFER_REQUEST: FramebufferRequest = FramebufferRequest::new();
 
 #[derive(Clone, Copy)]

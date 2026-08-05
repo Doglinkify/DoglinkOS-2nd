@@ -7,7 +7,7 @@ use limine::request::HhdmRequest;
 use spin::Mutex;
 
 #[used]
-#[link_section = ".requests"]
+#[unsafe(link_section = ".requests")]
 static HHDM_REQUEST: HhdmRequest = HhdmRequest::new();
 
 #[global_allocator]

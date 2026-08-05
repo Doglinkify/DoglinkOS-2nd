@@ -1,5 +1,7 @@
 use crate::mm::phys_to_virt;
 use crate::println;
+use acpi::AcpiTables;
+use acpi::PciConfigRegions;
 use acpi::fadt::Fadt;
 use acpi::handler::AcpiHandler;
 use acpi::handler::PhysicalMapping;
@@ -7,19 +9,17 @@ use acpi::madt::Madt;
 use acpi::madt::MadtEntry;
 use acpi::mcfg::PciConfigEntry;
 use acpi::platform::interrupt::InterruptModel;
-use acpi::AcpiTables;
-use acpi::PciConfigRegions;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use aml::AmlContext;
 use core::ptr::NonNull;
 use limine::request::RsdpRequest;
-use spin::mutex::Mutex;
 use spin::Lazy;
+use spin::mutex::Mutex;
 use x86_64::instructions::port::{PortReadOnly, PortWriteOnly};
 
 #[used]
-#[link_section = ".requests"]
+#[unsafe(link_section = ".requests")]
 static RSDP_REQUEST: RsdpRequest = RsdpRequest::new();
 
 #[derive(Copy, Clone)]

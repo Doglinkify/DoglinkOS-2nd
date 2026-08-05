@@ -6,16 +6,16 @@ use spin::{Lazy, Mutex};
 use x86_64::addr::PhysAddr;
 use x86_64::registers::control::Cr2;
 use x86_64::structures::idt::PageFaultErrorCode;
-use x86_64::structures::paging::page::Page;
 use x86_64::structures::paging::FrameAllocator;
 use x86_64::structures::paging::FrameDeallocator;
 use x86_64::structures::paging::Mapper;
 use x86_64::structures::paging::PageTableFlags;
 use x86_64::structures::paging::PhysFrame;
 use x86_64::structures::paging::Size4KiB;
+use x86_64::structures::paging::page::Page;
 
 #[used]
-#[link_section = ".requests"]
+#[unsafe(link_section = ".requests")]
 static MMAP_REQUEST: MemmapRequest = MemmapRequest::new();
 
 pub static ALLOCATOR_STATE: Lazy<Mutex<PageMan>> = Lazy::new(|| {
@@ -37,8 +37,8 @@ pub static ALLOCATOR_STATE: Lazy<Mutex<PageMan>> = Lazy::new(|| {
     // println!("[DEBUG] mm: need to manage {} pages (aka {} {})", total_pages, conv_res.0, conv_res.1);
 
     let bitmap_size = PageMan::calc_size(total_pages); // unit: (count, count, bytes)
-                                                       // let conv_res = convert_unit(bitmap_size.2);
-                                                       // println!("[DEBUG] mm: need bitmap size of {} {}", conv_res.0, conv_res.1);
+    // let conv_res = convert_unit(bitmap_size.2);
+    // println!("[DEBUG] mm: need bitmap size of {} {}", conv_res.0, conv_res.1);
 
     let bitmap_address = usable_mem
         .clone()

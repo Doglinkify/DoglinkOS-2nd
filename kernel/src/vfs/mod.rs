@@ -16,7 +16,7 @@ use limine::request::ModulesRequest;
 use spin::{Lazy, Mutex};
 
 #[used]
-#[link_section = ".requests"]
+#[unsafe(link_section = ".requests")]
 pub(crate) static MODULE_REQUEST: ModulesRequest =
     ModulesRequest::new_rev1(&[&InternalModule::new(c"/initrd.img", c"initrd", 0)]);
 

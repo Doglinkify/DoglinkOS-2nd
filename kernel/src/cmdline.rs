@@ -4,7 +4,7 @@ use limine::request::ExecutableCmdlineRequest;
 use spin::Lazy;
 
 #[used]
-#[link_section = ".requests"]
+#[unsafe(link_section = ".requests")]
 static CMDLINE_REQUEST: ExecutableCmdlineRequest = ExecutableCmdlineRequest::new();
 
 pub static CMDLINE: Lazy<String> = Lazy::new(|| {

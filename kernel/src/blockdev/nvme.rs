@@ -25,7 +25,7 @@ impl Allocator for NvmeAllocator {
     unsafe fn allocate(&self, size: usize) -> usize {
         // println!("[DEBUG] NvmeAllocator got a request of {size} bytes");
         let res = phys_to_virt(find_continuous_mem(size.div_ceil(4096))) as usize;
-        (res as *mut u8).write_bytes(0, 4096);
+        unsafe { (res as *mut u8).write_bytes(0, 4096) };
         res
     }
 

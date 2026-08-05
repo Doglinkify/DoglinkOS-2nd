@@ -127,34 +127,36 @@ impl HbaPort {
         let fis_pa = alloc_physical_page().unwrap();
         let fis_va = phys_to_virt(fis_pa);
 
-        let mut pgt = OffsetPageTable::new(
-            &mut *(phys_to_virt(Cr3::read().0.start_address().as_u64()) as *mut PageTable),
-            VirtAddr::new(crate::mm::phys_to_virt(0)),
-        );
-        let _ = pgt
-            .update_flags(
-                Page::<Size4KiB>::containing_address(VirtAddr::new(cmd_list_va)),
-                PageTableFlags::WRITABLE | PageTableFlags::PRESENT | PageTableFlags::NO_CACHE,
-            )
-            .map(|u| u.flush());
-        let _ = pgt
-            .update_flags(
-                Page::<Size4KiB>::containing_address(VirtAddr::new(cmd_table_va)),
-                PageTableFlags::WRITABLE | PageTableFlags::PRESENT | PageTableFlags::NO_CACHE,
-            )
-            .map(|u| u.flush());
-        let _ = pgt
-            .update_flags(
-                Page::<Size4KiB>::containing_address(VirtAddr::new(fis_va)),
-                PageTableFlags::WRITABLE | PageTableFlags::PRESENT | PageTableFlags::NO_CACHE,
-            )
-            .map(|u| u.flush());
-        let _ = pgt
-            .update_flags(
-                Page::<Size4KiB>::containing_address(VirtAddr::new(data_va)),
-                PageTableFlags::WRITABLE | PageTableFlags::PRESENT | PageTableFlags::NO_CACHE,
-            )
-            .map(|u| u.flush());
+        unsafe {
+            let mut pgt = OffsetPageTable::new(
+                &mut *(phys_to_virt(Cr3::read().0.start_address().as_u64()) as *mut PageTable),
+                VirtAddr::new(crate::mm::phys_to_virt(0)),
+            );
+            let _ = pgt
+                .update_flags(
+                    Page::<Size4KiB>::containing_address(VirtAddr::new(cmd_list_va)),
+                    PageTableFlags::WRITABLE | PageTableFlags::PRESENT | PageTableFlags::NO_CACHE,
+                )
+                .map(|u| u.flush());
+            let _ = pgt
+                .update_flags(
+                    Page::<Size4KiB>::containing_address(VirtAddr::new(cmd_table_va)),
+                    PageTableFlags::WRITABLE | PageTableFlags::PRESENT | PageTableFlags::NO_CACHE,
+                )
+                .map(|u| u.flush());
+            let _ = pgt
+                .update_flags(
+                    Page::<Size4KiB>::containing_address(VirtAddr::new(fis_va)),
+                    PageTableFlags::WRITABLE | PageTableFlags::PRESENT | PageTableFlags::NO_CACHE,
+                )
+                .map(|u| u.flush());
+            let _ = pgt
+                .update_flags(
+                    Page::<Size4KiB>::containing_address(VirtAddr::new(data_va)),
+                    PageTableFlags::WRITABLE | PageTableFlags::PRESENT | PageTableFlags::NO_CACHE,
+                )
+                .map(|u| u.flush());
+        }
 
         self.command_list_base_address.set(cmd_list_pa);
         self.fis_base_address.set(fis_pa);
@@ -166,13 +168,13 @@ impl HbaPort {
         let cmd_list = unsafe { slice::from_raw_parts_mut(cmd_list_ptr, cmd_list_size) };
 
         let cmd_header = &mut cmd_list[0];
-        *cmd_header = core::mem::zeroed();
+        *cmd_header = unsafe { core::mem::zeroed() };
         cmd_header.command_table_base_address = cmd_table_pa;
         cmd_header.flags = (size_of::<FisRegH2D>() / size_of::<u32>()) as u16;
         cmd_header.prdt_length = 1;
 
-        let cmd_table = &mut *(cmd_table_va as *mut CommandTable);
-        *cmd_table = core::mem::zeroed();
+        let cmd_table = unsafe { &mut *(cmd_table_va as *mut CommandTable) };
+        *cmd_table = unsafe { core::mem::zeroed() };
         let prdt = &mut cmd_table.prdt[0];
         prdt.data_base_address = data_pa;
         prdt.byte_count_i = (BLOCK_SIZE - 1) as u32;

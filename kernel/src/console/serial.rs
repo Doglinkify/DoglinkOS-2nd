@@ -6,55 +6,53 @@ const PORT: u16 = 0x3f8;
 pub(crate) static SERIAL_OK: AtomicBool = AtomicBool::new(false);
 
 #[inline]
-unsafe fn outb(port: u16, value: u8) {
-    PortWriteOnly::new(port).write(value);
+fn outb(port: u16, value: u8) {
+    unsafe { PortWriteOnly::new(port).write(value) };
 }
 
 #[inline]
-unsafe fn inb(port: u16) -> u8 {
-    PortReadOnly::new(port).read()
+fn inb(port: u16) -> u8 {
+    unsafe { PortReadOnly::new(port).read() }
 }
 
 pub(super) fn init() {
-    unsafe {
-        outb(PORT + 1, 0x00); // Disable all interrupts
-        outb(PORT + 3, 0x80); // Enable DLAB (set baud rate divisor)
-        outb(PORT, 0x01); // Set divisor to 1 (lo byte) 115200 baud
-        outb(PORT + 1, 0x00); //                  (hi byte)
-        outb(PORT + 3, 0x03); // 8 bits, no parity, one stop bit
-        outb(PORT + 2, 0xC7); // Enable FIFO, clear them, with 14-byte threshold
-        outb(PORT + 4, 0x0B); // IRQs enabled, RTS/DSR set
-        outb(PORT + 4, 0x1E); // Set in loopback mode, test the serial chip
-        outb(PORT, 0xAE); // Test serial chip (send byte 0xAE and check if serial returns same byte)
-        if inb(PORT) != 0xAE {
-            return;
-        }
-        outb(PORT + 4, 0x0F);
-        SERIAL_OK.store(true, Ordering::Relaxed);
+    outb(PORT + 1, 0x00); // Disable all interrupts
+    outb(PORT + 3, 0x80); // Enable DLAB (set baud rate divisor)
+    outb(PORT, 0x01); // Set divisor to 1 (lo byte) 115200 baud
+    outb(PORT + 1, 0x00); //                  (hi byte)
+    outb(PORT + 3, 0x03); // 8 bits, no parity, one stop bit
+    outb(PORT + 2, 0xC7); // Enable FIFO, clear them, with 14-byte threshold
+    outb(PORT + 4, 0x0B); // IRQs enabled, RTS/DSR set
+    outb(PORT + 4, 0x1E); // Set in loopback mode, test the serial chip
+    outb(PORT, 0xAE); // Test serial chip (send byte 0xAE and check if serial returns same byte)
+    if inb(PORT) != 0xAE {
+        return;
     }
+    outb(PORT + 4, 0x0F);
+    SERIAL_OK.store(true, Ordering::Relaxed);
 }
 
 fn received() -> bool {
-    unsafe { inb(PORT + 5) & 1 == 1 }
+    inb(PORT + 5) & 1 == 1
 }
 
 /// Non-blocking read
 pub fn read() -> Option<u8> {
     if received() {
-        Some(unsafe { inb(PORT) })
+        Some(inb(PORT))
     } else {
         None
     }
 }
 
 fn is_transmit_empty() -> bool {
-    unsafe { inb(PORT + 5) & 0x20 == 0x20 }
+    inb(PORT + 5) & 0x20 == 0x20
 }
 
 /// Blocking write
 pub fn write(data: u8) {
     while !is_transmit_empty() {}
-    unsafe { outb(PORT, data) }
+    outb(PORT, data)
 }
 
 /// Blocking write bytes

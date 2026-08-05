@@ -18,9 +18,9 @@ impl VfsFile for PcspkDevice {
     fn write(&mut self, buf: &[u8]) -> usize {
         if let Ok(s) = core::str::from_utf8(buf) {
             if s.trim() == "stop" {
-                unsafe { pcspk::stop_sound() }
+                pcspk::stop_sound()
             } else if let Ok(freq) = s.trim().parse() {
-                unsafe { pcspk::play_sound(freq) }
+                pcspk::play_sound(freq)
             }
             buf.len()
         } else {

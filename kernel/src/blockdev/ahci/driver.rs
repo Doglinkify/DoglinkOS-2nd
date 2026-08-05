@@ -23,7 +23,6 @@ pub struct Ahci {
 }
 
 unsafe impl Send for Ahci {}
-unsafe impl Sync for Ahci {}
 
 impl Ahci {
     pub fn new(address: VirtAddr) -> Vec<Self> {
@@ -49,7 +48,7 @@ impl Ahci {
     }
 
     pub fn read_block(&mut self, start_sector: u64, buffer: &mut [u8]) {
-        unsafe { self.execute_command(CMD_READ_DMA_EXT, start_sector) }
+        self.execute_command(CMD_READ_DMA_EXT, start_sector);
         let length = buffer.len().min(BLOCK_SIZE);
         buffer.copy_from_slice(&self.data[..length]);
     }
@@ -57,16 +56,16 @@ impl Ahci {
     pub fn write_block(&mut self, start_sector: u64, buffer: &[u8]) {
         let length = buffer.len().min(BLOCK_SIZE);
         self.data[..length].copy_from_slice(&buffer[..length]);
-        unsafe { self.execute_command(CMD_WRITE_DMA_EXT, start_sector) }
+        self.execute_command(CMD_WRITE_DMA_EXT, start_sector);
     }
 
-    unsafe fn execute_command(&mut self, command: u8, start_sector: u64) {
+    fn execute_command(&mut self, command: u8, start_sector: u64) {
         // crate::println!(
         //     "[DEBUG] ahci/driver.rs: Ahci::execute_command({command},{start_sector}) called"
         // );
         let cmd_table = &mut *self.cmd_table;
-        let fis = &mut *(cmd_table.cfis.as_mut_ptr() as *mut FisRegH2D);
-        *fis = core::mem::zeroed();
+        let fis = unsafe { &mut *(cmd_table.cfis.as_mut_ptr() as *mut FisRegH2D) };
+        *fis = unsafe { core::mem::zeroed() };
         fis.fis_type = FIS_TYPE_REG_H2D;
         fis.cflags = 1 << 7;
         fis.command = command;

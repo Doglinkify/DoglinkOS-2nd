@@ -31,11 +31,11 @@ impl AcpiHandler for Handler {
         physical_address: usize,
         size: usize,
     ) -> PhysicalMapping<Self, T> {
-        let va = {
+        let va = unsafe {
             let virtual_address = crate::mm::phys_to_virt(physical_address as u64);
             NonNull::new_unchecked(virtual_address as *mut T)
         };
-        PhysicalMapping::new(physical_address, va, size, size, *self)
+        unsafe { PhysicalMapping::new(physical_address, va, size, size, *self) }
     }
 
     fn unmap_physical_region<T>(_region: &PhysicalMapping<Self, T>) {}

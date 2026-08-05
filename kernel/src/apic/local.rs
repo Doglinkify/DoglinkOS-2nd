@@ -7,7 +7,6 @@ use x2apic::lapic::{xapic_base, LocalApic, LocalApicBuilder, TimerDivide, TimerM
 struct WrappedLocalApic(LocalApic);
 
 unsafe impl Send for WrappedLocalApic {}
-unsafe impl Sync for WrappedLocalApic {}
 
 static LAPIC: Mutex<Option<WrappedLocalApic>> = Mutex::new(None);
 

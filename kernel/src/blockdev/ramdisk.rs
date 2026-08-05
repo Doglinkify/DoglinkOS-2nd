@@ -16,7 +16,6 @@ impl RamDisk {
     }
 }
 
-unsafe impl Sync for RamDisk {}
 unsafe impl Send for RamDisk {}
 
 impl IoBase for RamDisk {

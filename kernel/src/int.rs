@@ -1,11 +1,11 @@
 use crate::println;
 use core::arch::naked_asm;
 use spin::Lazy;
+use x86_64::PrivilegeLevel;
 use x86_64::registers::control::Cr2;
 use x86_64::structures::idt::InterruptDescriptorTable;
 use x86_64::structures::idt::InterruptStackFrame;
 use x86_64::structures::idt::PageFaultErrorCode;
-use x86_64::PrivilegeLevel;
 
 pub static IDT: Lazy<InterruptDescriptorTable> = Lazy::new(|| {
     let mut temp = InterruptDescriptorTable::new();

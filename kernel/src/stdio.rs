@@ -1,6 +1,6 @@
 use core::sync::atomic::{AtomicU8, Ordering};
 
-use crate::console::{self, serial, ECHO_FLAG};
+use crate::console::{self, ECHO_FLAG, serial};
 
 #[repr(u8)]
 #[derive(Copy, Clone, Eq, PartialEq)]

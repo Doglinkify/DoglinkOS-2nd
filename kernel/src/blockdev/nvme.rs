@@ -12,7 +12,7 @@ use x86_64::structures::paging::{
 };
 use x86_64::{PhysAddr, VirtAddr};
 
-use crate::mm::page_alloc::{dealloc_physical_page, find_continuous_mem, DLOSFrameAllocator};
+use crate::mm::page_alloc::{DLOSFrameAllocator, dealloc_physical_page, find_continuous_mem};
 use crate::mm::phys_to_virt;
 use crate::pcie::enumrate::doit;
 

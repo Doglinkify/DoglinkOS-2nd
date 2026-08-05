@@ -1,11 +1,11 @@
 use bit_field::BitField;
 use core::slice;
 use vcell::VolatileCell as Volatile;
+use x86_64::VirtAddr;
 use x86_64::registers::control::Cr3;
 use x86_64::structures::paging::{
     Mapper, OffsetPageTable, Page, PageTable, PageTableFlags, Size4KiB,
 };
-use x86_64::VirtAddr;
 
 use super::cmd::{CommandHeader, CommandTable, FisRegH2D};
 use super::driver::Ahci;

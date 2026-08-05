@@ -1,7 +1,7 @@
 use fatfs::SeekFrom;
 use gpt_disk_io::{
-    gpt_disk_types::{BlockSize, GptPartitionEntry},
     BlockIo, Disk,
+    gpt_disk_types::{BlockSize, GptPartitionEntry},
 };
 
 use crate::{

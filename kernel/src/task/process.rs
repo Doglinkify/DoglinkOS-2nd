@@ -14,13 +14,13 @@ use x86_64::addr::PhysAddr;
 use x86_64::addr::VirtAddr;
 use x86_64::registers::control::Cr3;
 use x86_64::registers::control::Cr3Flags;
+use x86_64::structures::paging::Mapper;
 use x86_64::structures::paging::frame::PhysFrame;
 use x86_64::structures::paging::mapper::OffsetPageTable;
 use x86_64::structures::paging::page::Page;
 use x86_64::structures::paging::page::Size4KiB;
 use x86_64::structures::paging::page_table::PageTable;
 use x86_64::structures::paging::page_table::PageTableFlags;
-use x86_64::structures::paging::Mapper;
 
 #[derive(Default, Copy, Clone, Debug)]
 #[repr(C)]

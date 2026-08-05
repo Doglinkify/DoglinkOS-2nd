@@ -2,9 +2,9 @@ use alloc::{sync::Arc, vec::Vec};
 use identify::IdentifyData;
 use spin::{Lazy, Mutex};
 use x86_64::{
+    VirtAddr,
     registers::control::Cr3,
     structures::paging::{Mapper, OffsetPageTable, Page, PageTable, PageTableFlags, Size4KiB},
-    VirtAddr,
 };
 
 use crate::mm::phys_to_virt;

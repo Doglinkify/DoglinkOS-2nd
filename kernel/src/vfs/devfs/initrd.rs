@@ -1,7 +1,7 @@
 use alloc::sync::Arc;
 use spin::Mutex;
 
-use crate::vfs::{VfsFile, MODULE_REQUEST};
+use crate::vfs::{MODULE_REQUEST, VfsFile};
 
 pub(super) fn open(path: &str) -> Result<Arc<Mutex<dyn VfsFile>>, ()> {
     if path != "/initrd" {

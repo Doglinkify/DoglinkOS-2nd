@@ -38,11 +38,7 @@ fn received() -> bool {
 
 /// Non-blocking read
 pub fn read() -> Option<u8> {
-    if received() {
-        Some(inb(PORT))
-    } else {
-        None
-    }
+    if received() { Some(inb(PORT)) } else { None }
 }
 
 fn is_transmit_empty() -> bool {

@@ -3,8 +3,8 @@ use core::alloc::Layout;
 use alloc::alloc::{alloc, dealloc};
 use fatfs::SeekFrom;
 use gpt_disk_io::{
-    gpt_disk_types::{BlockSize, GptPartitionEntry},
     BlockIo, Disk,
+    gpt_disk_types::{BlockSize, GptPartitionEntry},
 };
 
 use crate::{blockdev::nvme::NvmeBlockDevice, println, vfs::mount};

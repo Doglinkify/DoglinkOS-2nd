@@ -5,8 +5,8 @@ use alloc::boxed::Box;
 use core::fmt::Write;
 use core::sync::atomic::AtomicBool;
 use crossbeam_queue::ArrayQueue;
-use framebuffer::{FrameBuffer, FRAMEBUFFER_REQUEST};
-use os_terminal::{font::BitmapFont, Terminal};
+use framebuffer::{FRAMEBUFFER_REQUEST, FrameBuffer};
+use os_terminal::{Terminal, font::BitmapFont};
 use spin::{Lazy, Mutex};
 
 pub static FRAMEBUFFER: Lazy<FrameBuffer> = Lazy::new(|| {

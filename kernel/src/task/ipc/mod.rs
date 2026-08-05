@@ -377,11 +377,7 @@ fn copy_name_arg(ptr: *const u8, len: usize) -> Option<String> {
     }
     let bytes = unsafe { core::slice::from_raw_parts(ptr, len) };
     let name = core::str::from_utf8(bytes).ok()?.to_owned();
-    if name.is_empty() {
-        None
-    } else {
-        Some(name)
-    }
+    if name.is_empty() { None } else { Some(name) }
 }
 
 fn current_handle_ref(handle_id: usize) -> Option<IpcHandle> {

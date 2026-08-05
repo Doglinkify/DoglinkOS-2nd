@@ -5,14 +5,14 @@ pub mod syscall;
 
 use core::arch::asm;
 use spin::Lazy;
+use x86_64::PrivilegeLevel;
 use x86_64::addr::PhysAddr;
 use x86_64::addr::VirtAddr;
 use x86_64::registers::control::Cr3;
-use x86_64::registers::segmentation::{Segment, SegmentSelector, CS, DS, ES, SS};
+use x86_64::registers::segmentation::{CS, DS, ES, SS, Segment, SegmentSelector};
 use x86_64::structures::gdt::{Descriptor, GlobalDescriptorTable};
 use x86_64::structures::paging::frame::PhysFrame;
 use x86_64::structures::tss::TaskStateSegment;
-use x86_64::PrivilegeLevel;
 
 pub static TSS: Lazy<TaskStateSegment> = Lazy::new(|| {
     let mut tss = TaskStateSegment::new();

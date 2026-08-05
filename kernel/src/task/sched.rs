@@ -1,7 +1,7 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
+use x86_64::PhysAddr;
 use x86_64::registers::control::Cr3;
 use x86_64::structures::paging::PhysFrame;
-use x86_64::PhysAddr;
 
 use super::process::ProcessContext;
 use super::process::ProcessState;
@@ -112,10 +112,12 @@ pub fn schedule(context: &mut super::process::ProcessContext, current_process_ex
         if max_tid.is_none() {
             // PID 0 is the idle task. It does not participate in normal blocking paths,
             // so it must remain runnable and gives schedule() a guaranteed fallback.
-            debug_assert!(tasks
-                .get(IDLE_TASK_ID)
-                .and_then(Option::as_ref)
-                .is_some_and(|task| matches!(task.state, ProcessState::Runnable)));
+            debug_assert!(
+                tasks
+                    .get(IDLE_TASK_ID)
+                    .and_then(Option::as_ref)
+                    .is_some_and(|task| matches!(task.state, ProcessState::Runnable))
+            );
             max_tid = Some(IDLE_TASK_ID);
         }
     }

@@ -13,7 +13,7 @@ pub static IDT: Lazy<InterruptDescriptorTable> = Lazy::new(|| {
     temp[34].set_handler_fn(handler3);
     if !crate::vfs::has_cmdline_flag("ps2_poll") {
         temp[36].set_handler_fn(handler4);
-        temp[47].set_handler_fn(handler7);
+        temp[47].set_handler_fn(handler4);
     }
     temp[0x80]
         .set_handler_fn(crate::task::syscall::syscall_handler)
@@ -102,9 +102,4 @@ pub extern "x86-interrupt" fn handler6(f: InterruptStackFrame, c: u64) {
         f.instruction_pointer, c
     );
     loop {}
-}
-
-pub extern "x86-interrupt" fn handler7(_: InterruptStackFrame) {
-    crate::inputdev::interrupt_handler();
-    crate::apic::local::eoi();
 }

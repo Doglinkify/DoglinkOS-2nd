@@ -170,47 +170,17 @@ pub fn test() {
 
 pub fn do_user_page_fault(ip: x86_64::VirtAddr, code: PageFaultErrorCode) {
     let addr = Cr2::read().unwrap();
+    if is_write_protection_fault(code) {
+        resolve_current_user_cow_fault();
+        return;
+    }
+
     let page = Page::<Size4KiB>::containing_address(addr);
     let current = crate::task::sched::CURRENT_TASK_ID.load(core::sync::atomic::Ordering::Relaxed);
     let mut tasks = crate::task::process::TASKS.lock();
     let task = tasks[current].as_mut().unwrap();
     let pgt = &mut task.page_table;
-    if code.contains(PageFaultErrorCode::PROTECTION_VIOLATION | PageFaultErrorCode::CAUSED_BY_WRITE)
-    {
-        let phys_addr = pgt.translate_page(page).unwrap().start_address().as_u64();
-        if page_getref(phys_addr) > 1 {
-            let new_page_pa = alloc_physical_page().unwrap();
-            let new_page_va = super::phys_to_virt(new_page_pa);
-            let old_page_va = addr.align_down(4096u64);
-            unsafe {
-                core::ptr::copy(old_page_va.as_ptr::<u8>(), new_page_va as *mut u8, 4096);
-                page_decref(phys_addr);
-                pgt.unmap(page).unwrap().1.flush();
-                pgt.map_to(
-                    page,
-                    PhysFrame::from_start_address(PhysAddr::new(new_page_pa)).unwrap(),
-                    PageTableFlags::PRESENT
-                        | PageTableFlags::WRITABLE
-                        | PageTableFlags::USER_ACCESSIBLE,
-                    &mut DLOSFrameAllocator,
-                )
-                .unwrap()
-                .flush();
-                page_incref(new_page_pa);
-            }
-        } else {
-            unsafe {
-                pgt.update_flags(
-                    page,
-                    PageTableFlags::PRESENT
-                        | PageTableFlags::WRITABLE
-                        | PageTableFlags::USER_ACCESSIBLE,
-                )
-                .unwrap()
-                .flush();
-            }
-        }
-    } else if within_stack_range(addr) || addr.as_u64() < task.brk {
+    if within_stack_range(addr) || addr.as_u64() < task.brk {
         let new_page_pa = alloc_physical_page().unwrap();
         page_incref(new_page_pa);
         unsafe {
@@ -228,6 +198,65 @@ pub fn do_user_page_fault(ip: x86_64::VirtAddr, code: PageFaultErrorCode) {
         }
     } else {
         panic!("unrecoverable user page fault, addr: {addr:?}, code: {code:?}, ip: {ip:?}");
+    }
+}
+
+/// Handle a Ring0 page fault.
+///
+/// Kernel code may write through a user pointer, which can trigger CoW after
+/// `fork`. This is the only recoverable Ring0 fault. It must not fall back to
+/// demand paging because an unmapped user address is a kernel bug.
+pub fn do_kernel_page_fault(ip: x86_64::VirtAddr, code: PageFaultErrorCode) {
+    let addr = Cr2::read().unwrap();
+    if !is_write_protection_fault(code) {
+        panic!("unrecoverable kernel page fault, addr: {addr:?}, code: {code:?}, ip: {ip:?}");
+    }
+    resolve_current_user_cow_fault();
+}
+
+fn is_write_protection_fault(code: PageFaultErrorCode) -> bool {
+    code.contains(PageFaultErrorCode::PROTECTION_VIOLATION | PageFaultErrorCode::CAUSED_BY_WRITE)
+}
+
+/// Resolve a write-protection fault on a CoW page in the current process.
+///
+/// The caller has established that the fault was caused by a write to a
+/// present user page.
+fn resolve_current_user_cow_fault() {
+    let addr = Cr2::read().unwrap();
+    let page = Page::<Size4KiB>::containing_address(addr);
+    let current = crate::task::sched::CURRENT_TASK_ID.load(core::sync::atomic::Ordering::Relaxed);
+    let mut tasks = crate::task::process::TASKS.lock();
+    let task = tasks[current].as_mut().unwrap();
+    let pgt = &mut task.page_table;
+    let old_page_pa = pgt.translate_page(page).unwrap().start_address().as_u64();
+    let writable_user_flags =
+        PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE;
+
+    if page_getref(old_page_pa) > 1 {
+        let new_page_pa = alloc_physical_page().unwrap();
+        unsafe {
+            core::ptr::copy_nonoverlapping(
+                phys_to_virt(old_page_pa) as *const u8,
+                phys_to_virt(new_page_pa) as *mut u8,
+                4096,
+            );
+            page_decref(old_page_pa);
+            pgt.unmap(page).unwrap().1.flush();
+            pgt.map_to(
+                page,
+                PhysFrame::from_start_address(PhysAddr::new(new_page_pa)).unwrap(),
+                writable_user_flags,
+                &mut DLOSFrameAllocator,
+            )
+            .unwrap()
+            .flush();
+            page_incref(new_page_pa);
+        }
+    } else {
+        unsafe {
+            pgt.update_flags(page, writable_user_flags).unwrap().flush();
+        }
     }
 }
 

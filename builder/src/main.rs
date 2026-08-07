@@ -157,12 +157,16 @@ fn build_img() -> PathBuf {
         ("/bin/imgview", imgview_path.to_path_buf()),
         ("/bin/ipc-demo", ipc_demo_path.to_path_buf()),
         ("/bin/upppd", upppd_path.to_path_buf()),
+        ("/bin/videoplay", assets_dir.join("videoplay.elf")),
         ("/res/test.jpg", assets_dir.join("test.jpg")),
         ("/res/test2.jpg", assets_dir.join("test2.jpg")),
         ("/res/test2.png", assets_dir.join("test2.png")),
         ("/res/test2_16.png", assets_dir.join("test2_16.png")),
         ("/res/test2.ppm", assets_dir.join("test2.ppm")),
         ("/res/test2.qoi", assets_dir.join("test2.qoi")),
+        ("/res/demo.dlv", assets_dir.join("demo.dlv")),
+        ("/res/demo.avi", assets_dir.join("demo-mjpeg.avi")),
+        ("/res/demo2.avi", assets_dir.join("demo2.avi")),
     ]);
     let initrd_path = manifest_dir.parent().unwrap().join("initrd.img");
     FatBuilder::create(initrd_files, &initrd_path).expect("failed to build initrd.img");

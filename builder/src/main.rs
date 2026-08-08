@@ -165,6 +165,7 @@ fn build_img() -> PathBuf {
         ("/res/test2.ppm", assets_dir.join("test2.ppm")),
         ("/res/test2.qoi", assets_dir.join("test2.qoi")),
         ("/res/demo.dlv", assets_dir.join("demo.dlv")),
+        ("/res/demo-dlv2.dlv", assets_dir.join("demo-dlv2.dlv")),
         ("/res/demo.avi", assets_dir.join("demo-mjpeg.avi")),
         ("/res/demo2.avi", assets_dir.join("demo2.avi")),
     ]);

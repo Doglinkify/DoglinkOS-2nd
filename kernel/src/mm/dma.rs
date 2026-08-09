@@ -6,13 +6,16 @@
 
 use core::ptr::NonNull;
 
-use x86_64::VirtAddr;
 use x86_64::registers::control::Cr3;
 use x86_64::structures::paging::{
-    Mapper, OffsetPageTable, Page, PageTable, PageTableFlags, Size4KiB,
+    Mapper, OffsetPageTable, Page, PageTable, PageTableFlags, PhysFrame, Size2MiB, Size4KiB,
+    mapper::FlagUpdateError,
 };
+use x86_64::{PhysAddr, VirtAddr};
 
-use crate::mm::page_alloc::{PAGE_SIZE, dealloc_continuous_mem, find_aligned_continuous_mem};
+use crate::mm::page_alloc::{
+    DLOSFrameAllocator, PAGE_SIZE, dealloc_continuous_mem, find_aligned_continuous_mem,
+};
 use crate::mm::phys_to_virt;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -148,14 +151,33 @@ impl MmioMapping {
         let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::NO_CACHE;
         for page_index in 0..range.pages {
             let virtual_address = phys_to_virt(range.base + page_index as u64 * PAGE_SIZE as u64);
-            unsafe {
-                mapper
-                    .update_flags(
-                        Page::<Size4KiB>::containing_address(VirtAddr::new(virtual_address)),
-                        flags,
-                    )
-                    .map_err(|_| MmioError::MappingMissing)?
-                    .flush();
+            let page = Page::<Size4KiB>::containing_address(VirtAddr::new(virtual_address));
+            let result = unsafe { mapper.update_flags(page, flags) };
+            match result {
+                Ok(flush) => flush.flush(),
+                // Limine commonly maps the HHDM with 2 MiB pages. A 4 KiB
+                // flag update cannot split such a mapping, so mark the
+                // containing huge page uncached instead.
+                Err(FlagUpdateError::ParentEntryHugePage) => {
+                    let huge = Page::<Size2MiB>::containing_address(VirtAddr::new(virtual_address));
+                    unsafe { mapper.update_flags(huge, flags) }
+                        .map_err(|_| MmioError::MappingMissing)?
+                        .flush();
+                }
+                Err(FlagUpdateError::PageNotMapped) => {
+                    let physical_address = range.base + page_index as u64 * PAGE_SIZE as u64;
+                    unsafe {
+                        mapper
+                            .map_to(
+                                page,
+                                PhysFrame::containing_address(PhysAddr::new(physical_address)),
+                                flags,
+                                &mut DLOSFrameAllocator,
+                            )
+                            .map_err(|_| MmioError::MappingMissing)?
+                            .flush();
+                    }
+                }
             }
         }
         let virtual_address = NonNull::new(phys_to_virt(physical_address) as *mut u8)

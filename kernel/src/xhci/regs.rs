@@ -19,6 +19,10 @@ impl RegisterBlock {
         self.base
     }
 
+    pub unsafe fn read16(self, offset: usize) -> u16 {
+        unsafe { read_volatile(self.base.add(offset).cast()) }
+    }
+
     pub unsafe fn read32(self, offset: usize) -> u32 {
         unsafe { read_volatile(self.base.add(offset).cast()) }
     }
@@ -52,3 +56,13 @@ pub const USBCMD_RUN: u32 = 1;
 pub const USBCMD_HCRST: u32 = 1 << 1;
 pub const USBSTS_HCHALTED: u32 = 1;
 pub const USBSTS_CNR: u32 = 1 << 11;
+
+pub const HCCPARAMS1_XECP_MASK: u32 = 0xff00_0000;
+pub const HCCPARAMS1_XECP_SHIFT: u32 = 16;
+
+pub const XECAP_ID_MASK: u32 = 0xff;
+pub const XECAP_NEXT_MASK: u32 = 0xffff << 8;
+pub const XECAP_NEXT_SHIFT: u32 = 8;
+pub const XECAP_USB_LEGACY_SUPPORT: u32 = 1;
+pub const USBLEGSUP_BIOS_OWNED: u32 = 1 << 16;
+pub const USBLEGSUP_OS_OWNED: u32 = 1 << 24;

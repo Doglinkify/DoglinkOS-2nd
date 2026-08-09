@@ -4,13 +4,17 @@
 //! effects yet.  The following commits build the hardware-facing lifecycle
 //! on top of these checked layouts and ring primitives.
 
+mod controller;
 pub mod regs;
 pub mod ring;
 pub mod trb;
+
+pub use controller::{ControllerState, init};
 
 /// Run the xHCI pure-logic self tests.
 pub fn test() {
     trb::test();
     ring::test();
+    controller::test();
     crate::println!("[INFO] xhci: TRB and ring self-tests passed");
 }

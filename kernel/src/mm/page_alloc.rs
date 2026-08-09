@@ -14,6 +14,8 @@ use x86_64::structures::paging::PhysFrame;
 use x86_64::structures::paging::Size4KiB;
 use x86_64::structures::paging::page::Page;
 
+pub const PAGE_SIZE: usize = 4096;
+
 #[used]
 #[unsafe(link_section = ".requests")]
 static MMAP_REQUEST: MemmapRequest = MemmapRequest::new();
@@ -84,7 +86,22 @@ pub fn init() {
     Lazy::force(&ALLOCATOR_STATE);
 }
 
-pub fn find_continuous_mem(cnt: usize) -> u64 {
+pub fn find_continuous_mem(cnt: usize) -> Option<u64> {
+    find_aligned_continuous_mem(cnt, PAGE_SIZE)
+}
+
+/// Reserve a contiguous physical range whose first page satisfies `alignment`.
+/// Allocation failure leaves the allocator bitmap unchanged.
+pub fn find_aligned_continuous_mem(cnt: usize, alignment: usize) -> Option<u64> {
+    if cnt == 0
+        || !alignment.is_power_of_two()
+        || alignment < PAGE_SIZE
+        || alignment % PAGE_SIZE != 0
+    {
+        return None;
+    }
+
+    let alignment_pages = alignment / PAGE_SIZE;
     let mut current_size = 0;
     let mut state = ALLOCATOR_STATE.lock();
     let limit = state.len();
@@ -95,11 +112,32 @@ pub fn find_continuous_mem(cnt: usize) -> u64 {
             current_size = 0;
         }
         if current_size == cnt {
-            state.set_range(i - cnt + 1, i + 1, false);
-            return ((i - cnt + 1) * 4096) as u64;
+            let start = i - cnt + 1;
+            if start % alignment_pages == 0 {
+                state.set_range(start, i + 1, false);
+                return Some((start * PAGE_SIZE) as u64);
+            }
+            current_size -= 1;
         }
     }
-    0
+    None
+}
+
+pub fn dealloc_continuous_mem(addr: u64, cnt: usize) {
+    if cnt == 0 || addr as usize % PAGE_SIZE != 0 {
+        return;
+    }
+    let start = addr as usize / PAGE_SIZE;
+    let mut allocator = ALLOCATOR_STATE.lock();
+    for index in start..start.saturating_add(cnt).min(allocator.len()) {
+        if allocator.get(index) {
+            println!(
+                "[WRANING] mm: detected double free on page 0x{:x}, kernel bug?",
+                index * PAGE_SIZE
+            );
+        }
+        allocator.set(index, true);
+    }
 }
 
 pub fn alloc_physical_page() -> Option<u64> {
@@ -107,14 +145,14 @@ pub fn alloc_physical_page() -> Option<u64> {
     for i in 0..allocator_state.len() {
         if allocator_state.get(i) {
             allocator_state.set(i, false);
-            return Some((i * 4096) as u64);
+            return Some((i * PAGE_SIZE) as u64);
         }
     }
     None
 }
 
 pub fn dealloc_physical_page(addr: u64) {
-    let index = addr / 4096;
+    let index = addr / PAGE_SIZE as u64;
     let mut alc = ALLOCATOR_STATE.lock();
     if alc.get(index as usize) {
         println!("[WRANING] mm: detected double free on page 0x{addr}, kernel bug?");

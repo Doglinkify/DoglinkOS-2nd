@@ -1,4 +1,5 @@
 pub mod bitmap;
+pub mod dma;
 pub mod page_alloc;
 pub mod paging;
 
@@ -21,7 +22,10 @@ pub fn init() {
         *OFFSET.lock() = res.offset;
     }
     self::page_alloc::init();
-    let heap_start_address = phys_to_virt(self::page_alloc::find_continuous_mem(2048));
+    let heap_start_address = phys_to_virt(
+        self::page_alloc::find_continuous_mem(2048)
+            .expect("mm: unable to reserve initial kernel heap"),
+    );
     unsafe {
         ALLOCATOR.init(heap_start_address as usize, 8 * 1024 * 1024);
     }

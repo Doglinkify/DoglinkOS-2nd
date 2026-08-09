@@ -9,6 +9,7 @@ use DoglinkOS_2nd::console::init as init_console;
 use DoglinkOS_2nd::cpu::show_cpu_info;
 use DoglinkOS_2nd::inputdev::init as init_inputdev;
 use DoglinkOS_2nd::int::init as init_interrupt;
+use DoglinkOS_2nd::mm::dma::test as test_dma;
 use DoglinkOS_2nd::mm::init as init_mm;
 use DoglinkOS_2nd::mm::page_alloc::test as test_page_alloc;
 use DoglinkOS_2nd::pcie::enumrate::doit;
@@ -59,6 +60,7 @@ extern "C" fn kmain() -> ! {
     show_pcie_info();
     test_pcie();
     test_page_alloc();
+    test_dma();
     init_vfs();
     init_sse();
     init_task();

@@ -16,7 +16,9 @@ use x86_64::structures::tss::TaskStateSegment;
 
 pub static TSS: Lazy<TaskStateSegment> = Lazy::new(|| {
     let mut tss = TaskStateSegment::new();
-    let rsp0_pa = crate::mm::page_alloc::find_continuous_mem(16) + 0x10000; // 64k rsp0
+    let rsp0_pa = crate::mm::page_alloc::find_continuous_mem(16)
+        .expect("task: unable to reserve kernel stack")
+        + 0x10000; // 64k rsp0
     tss.privilege_stack_table[0] = VirtAddr::new(crate::mm::phys_to_virt(rsp0_pa));
     tss
 });

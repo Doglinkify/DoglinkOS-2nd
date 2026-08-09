@@ -17,6 +17,7 @@ use DoglinkOS_2nd::pcie::enumrate::test as test_pcie;
 use DoglinkOS_2nd::println;
 use DoglinkOS_2nd::task::{init as init_task, init_sse, reset_gdt};
 use DoglinkOS_2nd::vfs::init as init_vfs;
+use DoglinkOS_2nd::xhci::test as test_xhci;
 use core::arch::asm;
 use limine::BaseRevision;
 use limine::{RequestsEndMarker, RequestsStartMarker};
@@ -61,6 +62,7 @@ extern "C" fn kmain() -> ! {
     test_pcie();
     test_page_alloc();
     test_dma();
+    test_xhci();
     init_vfs();
     init_sse();
     init_task();

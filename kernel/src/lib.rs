@@ -21,3 +21,4 @@ pub mod sound;
 pub mod stdio;
 pub mod task;
 pub mod vfs;
+pub mod xhci;

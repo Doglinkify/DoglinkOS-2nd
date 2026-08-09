@@ -51,6 +51,17 @@ pub const USBSTS: usize = 0x04;
 pub const CONFIG: usize = 0x38;
 pub const DCBAAP: usize = 0x30;
 pub const CRCR: usize = 0x18;
+pub const PORTSC: usize = 0x400;
+pub const DB_TARGET: u32 = 0;
+pub const RT_INTR0: usize = 0x20;
+pub const IMAN: usize = 0x00;
+pub const ERSTSZ: usize = 0x08;
+pub const ERSTBA: usize = 0x10;
+pub const ERDP: usize = 0x18;
+pub const USBSTS_EINT: u32 = 1 << 3;
+pub const IMAN_IP: u32 = 1;
+pub const IMAN_IE: u32 = 1 << 1;
+pub const TRB_TYPE_NOOP_COMMAND: u32 = 23 << 10;
 
 pub const USBCMD_RUN: u32 = 1;
 pub const USBCMD_HCRST: u32 = 1 << 1;

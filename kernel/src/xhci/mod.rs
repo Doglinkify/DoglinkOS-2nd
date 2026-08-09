@@ -8,6 +8,7 @@ mod controller;
 pub mod regs;
 pub mod ring;
 pub mod trb;
+pub mod usb;
 
 pub use controller::{ControllerState, init};
 
@@ -15,6 +16,7 @@ pub use controller::{ControllerState, init};
 pub fn test() {
     trb::test();
     ring::test();
+    usb::test();
     controller::test();
-    crate::println!("[INFO] xhci: TRB and ring self-tests passed");
+    crate::println!("[INFO] xhci: core self-tests passed");
 }

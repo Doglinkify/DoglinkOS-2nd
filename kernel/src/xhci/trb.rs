@@ -9,12 +9,16 @@ pub struct Trb {
 }
 
 pub const TRB_CYCLE: u32 = 1;
+pub const TRB_CHAIN: u32 = 1 << 4;
 pub const TRB_TYPE_SHIFT: u32 = 10;
 pub const TRB_TYPE_MASK: u32 = 0x3f << TRB_TYPE_SHIFT;
 pub const TRB_TYPE_LINK: u32 = 6 << TRB_TYPE_SHIFT;
 pub const TRB_TYPE_EVENT_DATA: u32 = 7 << TRB_TYPE_SHIFT;
 pub const TRB_TYPE_COMMAND_COMPLETION: u32 = 33 << TRB_TYPE_SHIFT;
 pub const TRB_TYPE_TRANSFER_EVENT: u32 = 32 << TRB_TYPE_SHIFT;
+pub const TRB_TYPE_SETUP_STAGE: u32 = 2 << TRB_TYPE_SHIFT;
+pub const TRB_TYPE_DATA_STAGE: u32 = 3 << TRB_TYPE_SHIFT;
+pub const TRB_TYPE_STATUS_STAGE: u32 = 4 << TRB_TYPE_SHIFT;
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -22,12 +26,15 @@ pub enum CompletionCode {
     Invalid = 0,
     Success = 1,
     DataBufferError = 2,
+    TrbError = 5,
     StallError = 6,
     RingUnderrun = 13,
     RingOverrun = 14,
     EventRingFull = 21,
     CommandAborted = 25,
     Stop = 26,
+    ContextStateError = 19,
+    NoSlotsAvailable = 9,
     Unknown = 255,
 }
 
@@ -37,9 +44,12 @@ impl CompletionCode {
             0 => Self::Invalid,
             1 => Self::Success,
             2 => Self::DataBufferError,
+            5 => Self::TrbError,
             6 => Self::StallError,
+            9 => Self::NoSlotsAvailable,
             13 => Self::RingUnderrun,
             14 => Self::RingOverrun,
+            19 => Self::ContextStateError,
             21 => Self::EventRingFull,
             25 => Self::CommandAborted,
             26 => Self::Stop,

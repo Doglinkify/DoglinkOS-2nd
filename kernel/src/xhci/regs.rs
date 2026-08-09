@@ -52,23 +52,32 @@ pub const CONFIG: usize = 0x38;
 pub const DCBAAP: usize = 0x30;
 pub const CRCR: usize = 0x18;
 pub const PORTSC: usize = 0x400;
+pub const PORTSC_CCS: u32 = 1 << 0;
+pub const PORTSC_PED: u32 = 1 << 1;
+pub const PORTSC_PR: u32 = 1 << 4;
+pub const PORTSC_PP: u32 = 1 << 9;
+pub const PORTSC_CSC: u32 = 1 << 17;
+pub const PORTSC_PRC: u32 = 1 << 21;
 pub const DB_TARGET: u32 = 0;
 pub const RT_INTR0: usize = 0x20;
 pub const IMAN: usize = 0x00;
 pub const ERSTSZ: usize = 0x08;
 pub const ERSTBA: usize = 0x10;
 pub const ERDP: usize = 0x18;
+pub const ERDP_EHB: u64 = 1 << 3;
 pub const USBSTS_EINT: u32 = 1 << 3;
 pub const IMAN_IP: u32 = 1;
 pub const IMAN_IE: u32 = 1 << 1;
 pub const TRB_TYPE_NOOP_COMMAND: u32 = 23 << 10;
+pub const TRB_TYPE_ENABLE_SLOT: u32 = 9 << 10;
+pub const TRB_TYPE_ADDRESS_DEVICE: u32 = 11 << 10;
 
 pub const USBCMD_RUN: u32 = 1;
 pub const USBCMD_HCRST: u32 = 1 << 1;
 pub const USBSTS_HCHALTED: u32 = 1;
 pub const USBSTS_CNR: u32 = 1 << 11;
 
-pub const HCCPARAMS1_XECP_MASK: u32 = 0xff00_0000;
+pub const HCCPARAMS1_XECP_MASK: u32 = 0xffff_0000;
 pub const HCCPARAMS1_XECP_SHIFT: u32 = 16;
 
 pub const XECAP_ID_MASK: u32 = 0xff;

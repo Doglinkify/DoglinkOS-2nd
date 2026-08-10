@@ -56,6 +56,7 @@ extern "C" fn kmain() -> ! {
     println!("[DEBUG] kmain: local apic id is {lapic_id}");
     init_ioapic(parse_madt(), lapic_id);
     init_inputdev();
+    DoglinkOS_2nd::inputdev::test();
     init_ahci();
     init_nvme();
     show_cpu_info();

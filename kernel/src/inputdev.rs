@@ -1,6 +1,6 @@
 use core::sync::atomic::{AtomicI16, AtomicU8, Ordering};
 
-use os_terminal::MouseInput;
+use os_terminal::{MouseButton, MouseInput};
 use x86_64::instructions::port::{PortReadOnly, PortWriteOnly};
 
 use crate::console::serial;
@@ -9,6 +9,97 @@ use crate::console::serial;
 enum Error {
     Timeout,
     TestFailed,
+}
+
+/// A source-neutral mouse event understood by the terminal input sink.
+///
+/// Device drivers should submit semantic events rather than PS/2 packets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MouseEvent {
+    Move {
+        x: isize,
+        y: isize,
+    },
+    Scroll(isize),
+    Button {
+        button: MouseButtonKind,
+        pressed: bool,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MouseButtonKind {
+    Left,
+    Right,
+    Middle,
+}
+
+fn submit_echo() {
+    let echo = crate::console::ECHO_FLAG.load(Ordering::Relaxed);
+    let mut terminal = crate::console::TERMINAL.lock();
+    while let Some(b) = crate::console::ECHO_BUFFER.pop() {
+        if echo {
+            if crate::stdio::serial_enabled() && serial::SERIAL_OK.load(Ordering::Relaxed) {
+                serial::write(b);
+            }
+            terminal.process(&[b]);
+        }
+        crate::console::INPUT_BUFFER.force_push(b);
+    }
+}
+
+/// Submit a Set-1-compatible keyboard make or break scan code.
+pub fn submit_keyboard_scancode(scancode: u8) {
+    if !crate::stdio::tty_enabled() {
+        return;
+    }
+    let mut terminal = crate::console::TERMINAL.lock();
+    terminal.handle_keyboard(scancode);
+    drop(terminal);
+    submit_echo();
+}
+
+/// Submit a semantic mouse event to the shared terminal/input sink.
+pub fn submit_mouse_event(event: MouseEvent) {
+    if !crate::stdio::tty_enabled() {
+        return;
+    }
+    let input = match event {
+        MouseEvent::Move { x, y } => MouseInput::Move(x.max(0) as usize, y.max(0) as usize),
+        MouseEvent::Scroll(lines) => MouseInput::Scroll(lines),
+        MouseEvent::Button { button, pressed } => {
+            let button = match button {
+                MouseButtonKind::Left => MouseButton::Left,
+                MouseButtonKind::Right => MouseButton::Right,
+                MouseButtonKind::Middle => MouseButton::Middle,
+            };
+            if pressed {
+                MouseInput::Pressed(button)
+            } else {
+                MouseInput::Released(button)
+            }
+        }
+    };
+    let mut terminal = crate::console::TERMINAL.lock();
+    terminal.handle_mouse(input);
+    drop(terminal);
+    submit_echo();
+}
+
+pub fn submit_mouse_scroll(lines: isize) {
+    submit_mouse_event(MouseEvent::Scroll(lines));
+}
+
+fn ps2_middle_button(flags: u8) -> bool {
+    flags & 0x02 != 0
+}
+
+fn ps2_scroll_delta(flags: u8, packet: u8) -> isize {
+    packet as i16 as isize - (((flags as i16) << 3) & 0x100) as isize
+}
+
+fn is_break_scancode(scancode: u8) -> bool {
+    scancode & 0x80 != 0
 }
 
 fn wait_write() -> Result<(), Error> {
@@ -134,7 +225,7 @@ pub fn handle_mouse(packet: u8) {
             let flags = FLAGS.load(Ordering::Relaxed);
             let x = X.load(Ordering::Relaxed);
             _ = x;
-            let y = packet as i16 - ((flags << 3) & 0x100);
+            let y = ps2_scroll_delta(flags as u8, packet) as i16;
             // crate::println!(
             //     "[DEBUG] mouse report x: {}, y: {}, middle button: {}, right button: {}, left button: {}",
             //     x, y,
@@ -142,21 +233,8 @@ pub fn handle_mouse(packet: u8) {
             //     (flags >> 1) & 1,
             //     flags & 1
             // );
-            if (flags >> 1) & 1 == 1 && crate::stdio::tty_enabled() {
-                let mut terminal = crate::console::TERMINAL.lock();
-                terminal.handle_mouse(MouseInput::Scroll(y as isize));
-                let echo = crate::console::ECHO_FLAG.load(core::sync::atomic::Ordering::Relaxed);
-                while let Some(b) = crate::console::ECHO_BUFFER.pop() {
-                    if echo {
-                        if crate::stdio::serial_enabled()
-                            && serial::SERIAL_OK.load(core::sync::atomic::Ordering::Relaxed)
-                        {
-                            serial::write(b);
-                        }
-                        terminal.process(&[b]);
-                    }
-                    crate::console::INPUT_BUFFER.force_push(b);
-                }
+            if ps2_middle_button(flags as u8) {
+                submit_mouse_scroll(y as isize);
             }
             CURRENT_PACKET.store(0, Ordering::Relaxed);
         }
@@ -251,22 +329,7 @@ fn handle_status_data(status: u8, data: u8) {
         handle_mouse(data);
     } else {
         let scancode = data;
-        if crate::stdio::tty_enabled() {
-            let mut term = crate::console::TERMINAL.lock();
-            term.handle_keyboard(scancode);
-            let echo = crate::console::ECHO_FLAG.load(core::sync::atomic::Ordering::Relaxed);
-            while let Some(b) = crate::console::ECHO_BUFFER.pop() {
-                if echo {
-                    if crate::stdio::serial_enabled()
-                        && serial::SERIAL_OK.load(core::sync::atomic::Ordering::Relaxed)
-                    {
-                        serial::write(b);
-                    }
-                    term.process(&[b]);
-                }
-                crate::console::INPUT_BUFFER.force_push(b);
-            }
-        }
+        submit_keyboard_scancode(scancode);
     }
 }
 
@@ -293,4 +356,15 @@ pub fn poll_once() {
             handle_status_data(status, data);
         }
     }
+}
+
+/// Run input decoding self-tests without relying on the Rust test harness.
+pub fn test() {
+    assert!(!is_break_scancode(0x1e));
+    assert!(is_break_scancode(0x9e));
+    assert_eq!(ps2_scroll_delta(0x00, 5), 5);
+    assert_eq!(ps2_scroll_delta(0x20, 0xfb), -5);
+    assert!(!ps2_middle_button(0x01));
+    assert!(ps2_middle_button(0x02));
+    crate::println!("[INFO] inputdev: source-neutral input self-tests passed");
 }

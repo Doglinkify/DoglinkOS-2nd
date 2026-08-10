@@ -2,9 +2,13 @@
 
 use super::regs;
 use super::trb::{
-    CompletionCode, TRB_CYCLE, TRB_TYPE_COMMAND_COMPLETION, TRB_TYPE_LINK, TRB_TYPE_MASK, Trb,
+    CompletionCode, TRB_CHAIN, TRB_CYCLE, TRB_TC, TRB_TYPE_COMMAND_COMPLETION, TRB_TYPE_LINK,
+    TRB_TYPE_MASK, Trb,
 };
-use super::usb::{PortState, SupportedProtocol, supported_protocol, usb2_max_packet};
+use super::usb::{
+    HidBootEndpoint, PortState, SetupRequest, SupportedProtocol, get_descriptor,
+    parse_configuration, set_configuration, set_idle, supported_protocol, usb2_max_packet,
+};
 use crate::mm::dma::{DmaBuffer, MmioMapping};
 use crate::pcie::enumrate::{Bdf, MemoryBar, PCIConfigSpace, decode_memory_bar, doit};
 use core::sync::atomic::{Ordering, fence};
@@ -13,10 +17,12 @@ const POLL_LIMIT: usize = 100_000;
 // USB transfers wait for device and frame scheduling, unlike the controller
 // commands above which QEMU completes immediately. Keep this bounded while
 // allowing a full control-transfer scheduling window.
-const TRANSFER_POLL_LIMIT: usize = 10_000_000;
+const TRANSFER_POLL_LIMIT: usize = 100_000_000;
+const TRANSFER_YIELD_INTERVAL: usize = 1024;
 const MIN_BAR_LEN: u64 = 0x1000;
 const EVENT_RING_ENTRIES: usize = 32;
 const COMMAND_RING_ENTRIES: usize = 4096 / core::mem::size_of::<Trb>();
+const TRANSFER_RING_ENTRIES: usize = COMMAND_RING_ENTRIES - 1;
 
 struct RootDevice {
     port: u8,
@@ -25,6 +31,32 @@ struct RootDevice {
     _output_context: DmaBuffer,
     _ep0_ring: DmaBuffer,
     _device_descriptor: DmaBuffer,
+    _configuration_descriptor: DmaBuffer,
+    _interrupt_ring: DmaBuffer,
+    _hid_endpoint: HidBootEndpoint,
+}
+
+/// Emit the stable endpoint diagnostic required by the enumeration logs.
+/// The configuration stage calls this after validating the complete
+/// descriptor and before issuing Configure Endpoint.
+#[allow(dead_code)]
+fn log_hid_endpoint(slot: u8, endpoint: HidBootEndpoint) {
+    crate::println!(
+        "[INFO] xhci: HID Boot endpoint slot {}, interface {}, address {:#04x}, max packet {}, interval {}",
+        slot,
+        endpoint.interface_number,
+        endpoint.endpoint_address,
+        endpoint.max_packet_size,
+        endpoint.interval
+    );
+}
+
+fn setup_value(request: SetupRequest) -> u64 {
+    request.bm_request_type as u64
+        | (request.request as u64) << 8
+        | (request.value as u64) << 16
+        | (request.index as u64) << 32
+        | (request.length as u64) << 48
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -114,7 +146,7 @@ impl ControllerResources {
                 command.add(COMMAND_RING_ENTRIES - 1),
                 Trb {
                     parameter: command_ring.physical_address(),
-                    control: TRB_TYPE_LINK | TRB_CYCLE,
+                    control: TRB_TYPE_LINK | TRB_TC | TRB_CYCLE,
                     ..Trb::default()
                 },
             );
@@ -271,7 +303,14 @@ impl ControllerResources {
         register: regs::RegisterBlock,
         trb_address: u64,
     ) -> Result<(), InitError> {
-        for _ in 0..TRANSFER_POLL_LIMIT {
+        for poll in 0..TRANSFER_POLL_LIMIT {
+            // Enumeration runs before the scheduler enables interrupts.  Poll
+            // the controller itself periodically so a virtual xHCI device can
+            // observe the doorbell and advance its USB-frame work; a write to
+            // an unrelated legacy port does not provide that guarantee.
+            if poll % TRANSFER_YIELD_INTERVAL == 0 {
+                unsafe { register.read32(self.op + regs::USBSTS) };
+            }
             let event = unsafe {
                 core::ptr::read_volatile(
                     self.event_ring.as_ptr().add(self.event_consumer * 16) as *const Trb
@@ -294,9 +333,17 @@ impl ControllerResources {
                 register.write32(self.runtime + regs::RT_INTR0 + regs::IMAN, regs::IMAN_IP);
                 register.write32(self.op + regs::USBSTS, regs::USBSTS_EINT);
             }
-            if event.control & TRB_TYPE_MASK == super::trb::TRB_TYPE_TRANSFER_EVENT
-                && event.parameter == trb_address
-            {
+            // The normal parameter is the TRB carrying IOC.  Accept any TRB
+            // in this control TD as well: older QEMU/xHCI combinations have
+            // been observed to report the data-stage address instead of the
+            // final status-stage address.  There is only one outstanding TD
+            // on EP0, so this remains unambiguous while avoiding a lost event.
+            let transfer_event =
+                event.control & TRB_TYPE_MASK == super::trb::TRB_TYPE_TRANSFER_EVENT;
+            let expected = event.parameter == trb_address
+                || (event.parameter >= trb_address.saturating_sub(2 * 16)
+                    && event.parameter <= trb_address);
+            if transfer_event && expected {
                 return match CompletionCode::from_status(event.status) {
                     CompletionCode::Success => Ok(()),
                     code => Err(InitError::Command(code)),
@@ -331,7 +378,7 @@ impl ControllerResources {
                     (self.command_ring.as_ptr() as *mut Trb).add(COMMAND_RING_ENTRIES - 1),
                     Trb {
                         parameter: self.command_ring.physical_address(),
-                        control: TRB_TYPE_LINK | self.command_cycle as u32,
+                        control: TRB_TYPE_LINK | TRB_TC | self.command_cycle as u32,
                         ..Trb::default()
                     },
                 );
@@ -522,6 +569,7 @@ impl ControllerResources {
         let output = DmaBuffer::new(context_size * 32, 64).map_err(|_| InitError::Allocation)?;
         let ep0 = DmaBuffer::new(4096, 64).map_err(|_| InitError::Allocation)?;
         let descriptor = DmaBuffer::new(18, 64).map_err(|_| InitError::Allocation)?;
+        let mut ep0_producer = 0;
         unsafe {
             core::ptr::write_volatile(
                 (self.dcbaa.as_ptr() as *mut u64).add(slot as usize),
@@ -550,11 +598,14 @@ impl ControllerResources {
                 (ep0.as_ptr() as *mut Trb).add(COMMAND_RING_ENTRIES - 1),
                 Trb {
                     parameter: ep0.physical_address(),
-                    control: TRB_TYPE_LINK | TRB_CYCLE,
+                    control: TRB_TYPE_LINK | TRB_TC | TRB_CYCLE,
                     ..Trb::default()
                 },
             );
         }
+        // Publish DCBAA, input contexts, and the initial endpoint ring before
+        // the Address Device command lets the controller fetch them.
+        fence(Ordering::SeqCst);
         if let Err(error) = self.submit_command(
             register,
             Trb {
@@ -572,7 +623,16 @@ impl ControllerResources {
             return Err(error);
         }
         crate::println!("[INFO] xhci: port {}, slot {} addressed", port, slot);
-        if let Err(error) = self.read_device_descriptor(register, slot, &ep0, &descriptor) {
+        self.log_ep0_context(slot, &output);
+        crate::println!(
+            "[INFO] xhci: port {}, slot {} HID configuration scan pending (SET_CONFIGURATION/Configure Endpoint)",
+            port,
+            slot
+        );
+        if let Err(error) =
+            self.read_device_descriptor(register, slot, &ep0, &mut ep0_producer, &descriptor)
+        {
+            self.log_ep0_context(slot, &output);
             crate::println!(
                 "[WARN] xhci: port {}, slot {} Device Descriptor failed: {:?}",
                 port,
@@ -581,6 +641,59 @@ impl ControllerResources {
             );
             return Err(error);
         }
+        let config_header = DmaBuffer::new(9, 64).map_err(|_| InitError::Allocation)?;
+        self.control_transfer(
+            register,
+            slot,
+            &ep0,
+            &mut ep0_producer,
+            get_descriptor(2, 9),
+            Some(&config_header),
+        )?;
+        let header = unsafe { core::slice::from_raw_parts(config_header.as_ptr(), 9) };
+        let total = u16::from_le_bytes([header[2], header[3]]) as usize;
+        if total < 9 || total > 4096 {
+            return Err(InitError::Command(CompletionCode::TrbError));
+        }
+        let configuration = DmaBuffer::new(total, 64).map_err(|_| InitError::Allocation)?;
+        self.control_transfer(
+            register,
+            slot,
+            &ep0,
+            &mut ep0_producer,
+            get_descriptor(2, total as u16),
+            Some(&configuration),
+        )?;
+        let endpoint = parse_configuration(unsafe {
+            core::slice::from_raw_parts(configuration.as_ptr(), total)
+        })
+        .map_err(|_| InitError::Command(CompletionCode::TrbError))?;
+        log_hid_endpoint(slot, endpoint);
+        self.control_transfer(
+            register,
+            slot,
+            &ep0,
+            &mut ep0_producer,
+            set_configuration(endpoint.configuration_value),
+            None,
+        )?;
+        self.control_transfer(
+            register,
+            slot,
+            &ep0,
+            &mut ep0_producer,
+            set_idle(endpoint.interface_number),
+            None,
+        )?;
+        let interrupt_ring = DmaBuffer::new(4096, 64).map_err(|_| InitError::Allocation)?;
+        self.configure_endpoint(register, slot, &input, endpoint, &interrupt_ring)?;
+        crate::println!(
+            "[INFO] xhci: HID endpoint configured slot {}, endpoint {:#04x}, interval {}, max packet {}, DCS 1",
+            slot,
+            endpoint.endpoint_address,
+            endpoint.interval,
+            endpoint.max_packet_size
+        );
         Ok(RootDevice {
             port,
             state: PortState::Addressed {
@@ -592,7 +705,184 @@ impl ControllerResources {
             _output_context: output,
             _ep0_ring: ep0,
             _device_descriptor: descriptor,
+            _configuration_descriptor: configuration,
+            _interrupt_ring: interrupt_ring,
+            _hid_endpoint: endpoint,
         })
+    }
+
+    fn log_ep0_context(&self, slot: u8, output: &DmaBuffer) {
+        let context_size = if self.context_64 { 64 } else { 32 };
+        unsafe {
+            // A device context starts directly with the slot context.  Unlike
+            // an input context, it has no leading input-control context, so
+            // EP0 is context 1 rather than context 2.
+            let context = output.as_ptr().add(context_size) as *const u32;
+            let state = core::ptr::read_volatile(context) & 0x7;
+            let max_packet = core::ptr::read_volatile(context.add(1)) >> 16;
+            let dequeue = core::ptr::read_volatile(context.add(2) as *const u64);
+            crate::println!(
+                "[DEBUG] xhci: slot {} EP0 state {}, max packet {}, dequeue {:#x}",
+                slot,
+                state,
+                max_packet,
+                dequeue,
+            );
+        }
+    }
+
+    fn control_transfer(
+        &mut self,
+        register: regs::RegisterBlock,
+        slot: u8,
+        ring: &DmaBuffer,
+        producer: &mut usize,
+        request: SetupRequest,
+        data: Option<&DmaBuffer>,
+    ) -> Result<(), InitError> {
+        let trb_count = if data.is_some() { 3 } else { 2 };
+        if *producer + trb_count > TRANSFER_RING_ENTRIES {
+            // Enumeration submits only a few TDs, but do not overwrite a TD
+            // that the controller may still own if that ever changes.
+            return Err(InitError::Command(CompletionCode::RingOverrun));
+        }
+        let ptr = unsafe { (ring.as_ptr() as *mut Trb).add(*producer) };
+        let data_len = request.length as u32;
+        let data_in = request.bm_request_type & 0x80 != 0;
+        let transfer_type = if data.is_some() {
+            if data_in { 3 } else { 2 }
+        } else {
+            0
+        };
+        unsafe {
+            core::ptr::write_volatile(
+                ptr,
+                Trb {
+                    parameter: setup_value(request),
+                    status: 8,
+                    control: super::trb::TRB_TYPE_SETUP_STAGE
+                        | (transfer_type << 16)
+                        // The setup packet is in this TRB's parameter field.
+                        | (1 << 6)
+                        | TRB_CHAIN
+                        | TRB_CYCLE,
+                },
+            );
+            if let Some(buffer) = data {
+                core::ptr::write_volatile(
+                    ptr.add(1),
+                    Trb {
+                        parameter: buffer.physical_address(),
+                        status: data_len,
+                        control: super::trb::TRB_TYPE_DATA_STAGE
+                            | if data_in { 1 << 16 } else { 0 }
+                            | TRB_CHAIN
+                            | TRB_CYCLE,
+                    },
+                );
+                core::ptr::write_volatile(
+                    ptr.add(2),
+                    Trb {
+                        // IOC on the final TRB is what produces the transfer
+                        // completion event consumed by poll_transfer.
+                        control: super::trb::TRB_TYPE_STATUS_STAGE
+                            | if data_in { 0 } else { 1 << 16 }
+                            | (1 << 5)
+                            | TRB_CYCLE,
+                        ..Trb::default()
+                    },
+                );
+                fence(Ordering::SeqCst);
+                register.write32(self.doorbell + slot as usize * 4, 1);
+                let completion = self.poll_transfer(
+                    register,
+                    ring.physical_address() + ((*producer + 2) * 16) as u64,
+                );
+                *producer += trb_count;
+                return completion;
+            }
+            core::ptr::write_volatile(
+                ptr.add(1),
+                Trb {
+                    // A no-data control request has an IN status stage.
+                    control: super::trb::TRB_TYPE_STATUS_STAGE | (1 << 16) | (1 << 5) | TRB_CYCLE,
+                    ..Trb::default()
+                },
+            );
+            fence(Ordering::SeqCst);
+            register.write32(self.doorbell + slot as usize * 4, 1);
+        }
+        let completion = self.poll_transfer(
+            register,
+            ring.physical_address() + ((*producer + 1) * 16) as u64,
+        );
+        *producer += trb_count;
+        completion
+    }
+
+    fn configure_endpoint(
+        &mut self,
+        register: regs::RegisterBlock,
+        slot: u8,
+        input: &DmaBuffer,
+        endpoint: HidBootEndpoint,
+        ring: &DmaBuffer,
+    ) -> Result<(), InitError> {
+        let context_size = if self.context_64 { 64 } else { 32 };
+        let endpoint_id = ((endpoint.endpoint_address & 0x0f) as usize) * 2
+            + usize::from(endpoint.endpoint_address & 0x80 != 0);
+        if endpoint_id == 0 || endpoint_id >= 32 {
+            return Err(InitError::Command(CompletionCode::TrbError));
+        }
+        unsafe {
+            let control = input.as_ptr().add(4) as *mut u32;
+            // Address Device used the same buffer with EP0 in its Add Context
+            // Flags.  Configure Endpoint accepts only the contexts this
+            // command changes: the Slot Context and the new interrupt EP.
+            core::ptr::write_volatile(control, 1 | 1 << endpoint_id);
+
+            // The Input Context has an Input Control Context before the slot
+            // and endpoint contexts.  The slot must also advertise the
+            // highest endpoint-context index being configured.
+            let slot_context = input.as_ptr().add(context_size) as *mut u32;
+            let slot_context_value = core::ptr::read_volatile(slot_context);
+            core::ptr::write_volatile(
+                slot_context,
+                (slot_context_value & !(0x1f << 27)) | (endpoint_id as u32) << 27,
+            );
+            let context = input.as_ptr().add(context_size * (endpoint_id + 1)) as *mut u32;
+            core::ptr::write_volatile(context, (endpoint.interval.saturating_sub(1) as u32) << 16);
+            core::ptr::write_volatile(
+                context.add(1),
+                (endpoint.max_packet_size as u32) << 16 | 3 << 1 | 7 << 3,
+            );
+            core::ptr::write_volatile(context.add(2) as *mut u64, ring.physical_address() | 1);
+            core::ptr::write_volatile(
+                (ring.as_ptr() as *mut Trb).add(COMMAND_RING_ENTRIES - 1),
+                Trb {
+                    parameter: ring.physical_address(),
+                    control: TRB_TYPE_LINK | TRB_TC | TRB_CYCLE,
+                    ..Trb::default()
+                },
+            );
+            crate::println!(
+                "[DEBUG] xhci: Configure Endpoint slot {}, add {:#010x}, entries {}, endpoint context {:#x}",
+                slot,
+                core::ptr::read_volatile(control),
+                core::ptr::read_volatile(slot_context) >> 27,
+                ring.physical_address() | 1,
+            );
+        }
+        fence(Ordering::SeqCst);
+        self.submit_command(
+            register,
+            Trb {
+                parameter: input.physical_address(),
+                control: regs::TRB_TYPE_CONFIGURE_ENDPOINT | (slot as u32) << 24,
+                ..Trb::default()
+            },
+        )
+        .map(|_| ())
     }
 
     fn read_device_descriptor(
@@ -600,52 +890,17 @@ impl ControllerResources {
         register: regs::RegisterBlock,
         slot: u8,
         ring: &DmaBuffer,
+        producer: &mut usize,
         descriptor: &DmaBuffer,
     ) -> Result<(), InitError> {
-        let ring_ptr = ring.as_ptr() as *mut Trb;
-        // GET_DESCRIPTOR(Device, 18): setup, IN data, then an OUT status stage.
-        unsafe {
-            core::ptr::write_volatile(
-                ring_ptr,
-                Trb {
-                    parameter: 0x0012_0000_0100_0680,
-                    // Setup Stage always transfers the eight-byte USB setup
-                    // packet; the length occupies bits 0..16, not TD Size.
-                    status: 8,
-                    control: super::trb::TRB_TYPE_SETUP_STAGE
-                        | (3 << 16)
-                        | (1 << 6)
-                        | super::trb::TRB_CHAIN
-                        | TRB_CYCLE,
-                },
-            );
-            core::ptr::write_volatile(
-                ring_ptr.add(1),
-                Trb {
-                    parameter: descriptor.physical_address(),
-                    // TD Size counts data packets remaining after this TRB;
-                    // the 18-byte high-speed descriptor fits in one packet.
-                    status: 18,
-                    control: super::trb::TRB_TYPE_DATA_STAGE
-                        | (1 << 16)
-                        | super::trb::TRB_CHAIN
-                        | TRB_CYCLE,
-                },
-            );
-            core::ptr::write_volatile(
-                ring_ptr.add(2),
-                Trb {
-                    // The data stage is IN, so the status handshake is OUT
-                    // (direction bit 16 clear). IOC on the final TRB asks
-                    // xHCI to publish the transfer completion event.
-                    control: super::trb::TRB_TYPE_STATUS_STAGE | (1 << 5) | TRB_CYCLE,
-                    ..Trb::default()
-                },
-            );
-            fence(Ordering::SeqCst);
-            register.write32(self.doorbell + slot as usize * 4, 1);
-        }
-        self.poll_transfer(register, ring.physical_address() + 2 * 16)
+        self.control_transfer(
+            register,
+            slot,
+            ring,
+            producer,
+            get_descriptor(1, 18),
+            Some(descriptor),
+        )
     }
 }
 

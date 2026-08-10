@@ -9,6 +9,7 @@ pub struct Trb {
 }
 
 pub const TRB_CYCLE: u32 = 1;
+pub const TRB_TC: u32 = 1 << 1;
 pub const TRB_CHAIN: u32 = 1 << 4;
 pub const TRB_TYPE_SHIFT: u32 = 10;
 pub const TRB_TYPE_MASK: u32 = 0x3f << TRB_TYPE_SHIFT;
@@ -61,7 +62,7 @@ impl CompletionCode {
 pub fn link_trb(next: u64, cycle: bool) -> Trb {
     Trb {
         parameter: next,
-        control: TRB_TYPE_LINK | ((cycle as u32) * TRB_CYCLE),
+        control: TRB_TYPE_LINK | TRB_TC | ((cycle as u32) * TRB_CYCLE),
         ..Trb::default()
     }
 }
@@ -72,6 +73,7 @@ pub fn test() {
     let link = link_trb(0x1234_0000, true);
     assert_eq!(link.parameter, 0x1234_0000);
     assert_eq!(link.control & TRB_TYPE_MASK, TRB_TYPE_LINK);
+    assert_ne!(link.control & TRB_TC, 0);
     assert_ne!(link.control & TRB_CYCLE, 0);
     assert_eq!(
         CompletionCode::from_status(1 << 24),

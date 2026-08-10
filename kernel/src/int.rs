@@ -15,6 +15,10 @@ pub static IDT: Lazy<InterruptDescriptorTable> = Lazy::new(|| {
         temp[36].set_handler_fn(handler4);
         temp[47].set_handler_fn(handler4);
     }
+    // Keep the xHCI MSI vector separate from the timer, LAPIC error/spurious,
+    // and legacy PS/2 vectors above.  The handler only acknowledges hardware;
+    // xHCI event parsing remains in the non-interrupt polling path.
+    temp[XHCI_MSI_VECTOR].set_handler_fn(xhci_handler);
     temp[0x80]
         .set_handler_fn(crate::task::syscall::syscall_handler)
         .set_privilege_level(PrivilegeLevel::Ring3);
@@ -22,6 +26,8 @@ pub static IDT: Lazy<InterruptDescriptorTable> = Lazy::new(|| {
     temp.general_protection_fault.set_handler_fn(handler6);
     temp
 });
+
+pub const XHCI_MSI_VECTOR: u8 = 0x50;
 
 pub fn init() {
     println!("[INFO] interrupt: init() called");
@@ -79,6 +85,11 @@ pub extern "x86-interrupt" fn handler3(_: InterruptStackFrame) {
 
 pub extern "x86-interrupt" fn handler4(_: InterruptStackFrame) {
     crate::inputdev::interrupt_handler();
+    crate::apic::local::eoi();
+}
+
+pub extern "x86-interrupt" fn xhci_handler(_: InterruptStackFrame) {
+    crate::xhci::interrupt_handler();
     crate::apic::local::eoi();
 }
 

@@ -11,7 +11,7 @@ pub mod ring;
 pub mod trb;
 pub mod usb;
 
-pub use controller::{ControllerState, init, poll};
+pub use controller::{ControllerState, init, interrupt_handler, poll};
 
 /// Run the xHCI pure-logic self tests.
 pub fn test() {

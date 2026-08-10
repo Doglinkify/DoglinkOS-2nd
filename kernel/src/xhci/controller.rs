@@ -12,8 +12,7 @@ use super::usb::{
 };
 use crate::mm::dma::{DmaBuffer, MmioMapping};
 use crate::pcie::enumrate::{Bdf, MemoryBar, PCIConfigSpace, decode_memory_bar, doit};
-use core::sync::atomic::{Ordering, fence};
-use spin::Mutex;
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering, fence};
 
 const POLL_LIMIT: usize = 100_000;
 // USB transfers wait for device and frame scheduling, unlike the controller
@@ -26,8 +25,40 @@ const EVENT_RING_ENTRIES: usize = 32;
 const COMMAND_RING_ENTRIES: usize = 4096 / core::mem::size_of::<Trb>();
 const TRANSFER_RING_ENTRIES: usize = COMMAND_RING_ENTRIES - 1;
 const POLL_EVENT_BUDGET: usize = 32;
+const PCI_CAP_ID_MSI: u8 = 0x05;
+const MSI_CONTROL_ENABLE: u16 = 1;
+const MSI_CONTROL_MME_MASK: u16 = 0b111 << 4;
+const MSI_CONTROL_64BIT: u16 = 1 << 7;
 
-static CONTROLLERS: Mutex<alloc::vec::Vec<usize>> = Mutex::new(alloc::vec::Vec::new());
+const MAX_CONTROLLERS: usize = 4;
+
+// Controllers are registered during single-threaded boot before MSI is
+// enabled.  Atomic slots let the interrupt handler inspect them without
+// taking a lock that an interrupted poll() could already hold.
+static CONTROLLERS: [AtomicUsize; MAX_CONTROLLERS] =
+    [const { AtomicUsize::new(0) }; MAX_CONTROLLERS];
+
+fn msi_data_offset(capability_offset: usize, control: u16) -> usize {
+    // The message data follows the 32-bit address, and an enabled 64-bit
+    // address capability contributes an additional DWORD.
+    if control & MSI_CONTROL_64BIT != 0 {
+        capability_offset + 12
+    } else {
+        capability_offset + 8
+    }
+}
+
+fn register_controller(controller: *mut ControllerResources) -> bool {
+    for slot in &CONTROLLERS {
+        if slot
+            .compare_exchange(0, controller as usize, Ordering::Release, Ordering::Relaxed)
+            .is_ok()
+        {
+            return true;
+        }
+    }
+    false
+}
 
 struct RootDevice {
     port: u8,
@@ -140,6 +171,10 @@ struct ControllerResources {
     op: usize,
     context_64: bool,
     ports: alloc::vec::Vec<RootDevice>,
+    interrupt_pending: AtomicBool,
+    interrupt_count: AtomicUsize,
+    msi_vector: Option<u8>,
+    logged_interrupt_count: usize,
 }
 
 impl ControllerResources {
@@ -209,6 +244,10 @@ impl ControllerResources {
             op: 0,
             context_64: false,
             ports: alloc::vec::Vec::new(),
+            interrupt_pending: AtomicBool::new(false),
+            interrupt_count: AtomicUsize::new(0),
+            msi_vector: None,
+            logged_interrupt_count: 0,
         })
     }
 
@@ -306,7 +345,11 @@ impl ControllerResources {
                     self.event_ring.physical_address() + (self.event_consumer * 16) as u64
                         | regs::ERDP_EHB,
                 );
-                register.write32(self.runtime + regs::RT_INTR0 + regs::IMAN, regs::IMAN_IP);
+                let iman = register.read32(self.runtime + regs::RT_INTR0 + regs::IMAN);
+                register.write32(
+                    self.runtime + regs::RT_INTR0 + regs::IMAN,
+                    (iman & regs::IMAN_IE) | regs::IMAN_IP,
+                );
                 register.write32(self.op + regs::USBSTS, regs::USBSTS_EINT);
             }
             if let Some(code) = command_completion(trb, command_address) {
@@ -357,7 +400,11 @@ impl ControllerResources {
                     self.event_ring.physical_address() + (self.event_consumer * 16) as u64
                         | regs::ERDP_EHB,
                 );
-                register.write32(self.runtime + regs::RT_INTR0 + regs::IMAN, regs::IMAN_IP);
+                let iman = register.read32(self.runtime + regs::RT_INTR0 + regs::IMAN);
+                register.write32(
+                    self.runtime + regs::RT_INTR0 + regs::IMAN,
+                    (iman & regs::IMAN_IE) | regs::IMAN_IP,
+                );
                 register.write32(self.op + regs::USBSTS, regs::USBSTS_EINT);
             }
             // The normal parameter is the TRB carrying IOC.  Accept any TRB
@@ -397,7 +444,11 @@ impl ControllerResources {
                 self.event_ring.physical_address() + (self.event_consumer * 16) as u64
                     | regs::ERDP_EHB,
             );
-            register.write32(self.runtime + regs::RT_INTR0 + regs::IMAN, regs::IMAN_IP);
+            let iman = register.read32(self.runtime + regs::RT_INTR0 + regs::IMAN);
+            register.write32(
+                self.runtime + regs::RT_INTR0 + regs::IMAN,
+                (iman & regs::IMAN_IE) | regs::IMAN_IP,
+            );
             register.write32(self.op + regs::USBSTS, regs::USBSTS_EINT);
         }
     }
@@ -434,6 +485,17 @@ impl ControllerResources {
 
     fn poll(&mut self, budget: usize) {
         let register = unsafe { regs::RegisterBlock::new(self._mapping.as_ptr()) };
+        if self.interrupt_pending.swap(false, Ordering::AcqRel) {
+            let count = self.interrupt_count.load(Ordering::Acquire);
+            if self.logged_interrupt_count == 0 {
+                crate::println!(
+                    "[INFO] xhci: MSI vector {} delivered event count {}",
+                    self.msi_vector.unwrap_or(0),
+                    count
+                );
+            }
+            self.logged_interrupt_count = count;
+        }
         for _ in 0..budget {
             let event = unsafe {
                 core::ptr::read_volatile(
@@ -482,6 +544,75 @@ impl ControllerResources {
             }
             Self::queue_interrupt_in(register, self.doorbell, device);
         }
+    }
+
+    fn enable_msi(&mut self, config: &PCIConfigSpace, bdf: Bdf) {
+        let Some(capability) = config.capabilities().find(|cap| cap.id == PCI_CAP_ID_MSI) else {
+            crate::println!(
+                "[INFO] xhci: {:02x}:{:02x}.{} has no MSI capability; using polling fallback",
+                bdf.bus,
+                bdf.device,
+                bdf.function
+            );
+            return;
+        };
+        let control = config.read_u16(capability.offset as usize + 2);
+        let data_offset = msi_data_offset(capability.offset as usize, control);
+        let destination = crate::apic::local::lapic_id() as u64;
+        let address = 0xfee0_0000u64 | (destination << 12);
+        let vector = crate::int::XHCI_MSI_VECTOR;
+        unsafe {
+            config.write_u32(capability.offset as usize + 4, address as u32);
+            if control & MSI_CONTROL_64BIT != 0 {
+                config.write_u32(capability.offset as usize + 8, (address >> 32) as u32);
+            }
+            config.write_u16(data_offset, vector as u16);
+            // Use one message, retain capability-defined read-only bits, and
+            // enable MSI only after the IDT vector and controller slot exist.
+            config.write_u16(
+                capability.offset as usize + 2,
+                (control & !MSI_CONTROL_MME_MASK) | MSI_CONTROL_ENABLE,
+            );
+            // The xHCI global interrupt gate is independent from IMAN.IE and
+            // PCI MSI enable.  Leave it clear for polling fallback, then open
+            // it only after the MSI message and IDT vector are ready.
+            let register = regs::RegisterBlock::new(self._mapping.as_ptr());
+            register.write32(
+                self.op + regs::USBCMD,
+                register.read32(self.op + regs::USBCMD) | regs::USBCMD_INTE,
+            );
+        }
+        self.msi_vector = Some(vector);
+        crate::println!(
+            "[INFO] xhci: {:02x}:{:02x}.{} MSI vector {:#x} configured",
+            bdf.bus,
+            bdf.device,
+            bdf.function,
+            vector
+        );
+    }
+
+    fn acknowledge_interrupt(&self) -> bool {
+        let register = unsafe { regs::RegisterBlock::new(self._mapping.as_ptr()) };
+        let status = unsafe { register.read32(self.op + regs::USBSTS) };
+        let iman = unsafe { register.read32(self.runtime + regs::RT_INTR0 + regs::IMAN) };
+        if status & regs::USBSTS_EINT == 0 && iman & regs::IMAN_IP == 0 {
+            return false;
+        }
+        unsafe {
+            if status & regs::USBSTS_EINT != 0 {
+                register.write32(self.op + regs::USBSTS, regs::USBSTS_EINT);
+            }
+            if iman & regs::IMAN_IP != 0 {
+                register.write32(
+                    self.runtime + regs::RT_INTR0 + regs::IMAN,
+                    (iman & regs::IMAN_IE) | regs::IMAN_IP,
+                );
+            }
+        }
+        self.interrupt_count.fetch_add(1, Ordering::Release);
+        self.interrupt_pending.store(true, Ordering::Release);
+        true
     }
 
     fn submit_command(
@@ -1218,12 +1349,18 @@ fn discover_one(bdf: Bdf, config: &PCIConfigSpace) -> ControllerState {
                 Ok(resources) => {
                     // These resources contain HHDM/MMIO pointers and are not
                     // Send. Keep each controller at a stable kernel-lifetime
-                    // address; poll() accesses it only while CONTROLLERS is
-                    // locked and no xHCI interrupt handler exists yet.
+                    // address before MSI can expose it to the IDT handler.
                     let controller = alloc::boxed::Box::leak(alloc::boxed::Box::new(resources));
-                    CONTROLLERS
-                        .lock()
-                        .push(controller as *mut ControllerResources as usize);
+                    if !register_controller(controller) {
+                        crate::println!(
+                            "[WARN] xhci: {:02x}:{:02x}.{} controller limit reached; using polling without MSI",
+                            bdf.bus,
+                            bdf.device,
+                            bdf.function
+                        );
+                    } else {
+                        controller.enable_msi(config, bdf);
+                    }
                     ControllerState::Reset
                 }
                 Err(InitError::Timeout(stage)) => {
@@ -1294,11 +1431,25 @@ pub fn init() {
 /// handler, so report decoding and terminal submission never run in interrupt
 /// context.
 pub fn poll() {
-    let controllers = CONTROLLERS.lock();
-    for &controller in controllers.iter() {
-        // Entries are leaked only after successful initialization and remain
-        // valid until kernel shutdown.  Access is serialized by this mutex.
-        unsafe { (&mut *(controller as *mut ControllerResources)).poll(POLL_EVENT_BUDGET) };
+    for controller in &CONTROLLERS {
+        let controller = controller.load(Ordering::Acquire);
+        if controller != 0 {
+            // Entries are leaked only after successful initialization and
+            // remain valid until kernel shutdown. poll() is called from the
+            // sole idle context; the MSI handler touches only atomics/MMIO.
+            unsafe { (&mut *(controller as *mut ControllerResources)).poll(POLL_EVENT_BUDGET) };
+        }
+    }
+}
+
+/// Acknowledge xHCI interrupt causes and defer all event parsing to poll().
+/// This is invoked only by the dedicated MSI vector.
+pub fn interrupt_handler() {
+    for controller in &CONTROLLERS {
+        let controller = controller.load(Ordering::Acquire);
+        if controller != 0 {
+            unsafe { (&*(controller as *const ControllerResources)).acknowledge_interrupt() };
+        }
     }
 }
 
@@ -1333,4 +1484,6 @@ pub fn test() {
         ),
         None
     );
+    assert_eq!(msi_data_offset(0x40, 0), 0x48);
+    assert_eq!(msi_data_offset(0x40, MSI_CONTROL_64BIT), 0x4c);
 }

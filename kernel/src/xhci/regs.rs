@@ -75,6 +75,7 @@ pub const TRB_TYPE_CONFIGURE_ENDPOINT: u32 = 12 << 10;
 
 pub const USBCMD_RUN: u32 = 1;
 pub const USBCMD_HCRST: u32 = 1 << 1;
+pub const USBCMD_INTE: u32 = 1 << 2;
 pub const USBSTS_HCHALTED: u32 = 1;
 pub const USBSTS_CNR: u32 = 1 << 11;
 

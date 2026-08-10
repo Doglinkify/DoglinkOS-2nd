@@ -1,9 +1,10 @@
 //! PCI discovery and the bounded xHCI controller reset sequence.
 
+use super::hid::{KeyboardState, MouseState};
 use super::regs;
 use super::trb::{
     CompletionCode, TRB_CHAIN, TRB_CYCLE, TRB_TC, TRB_TYPE_COMMAND_COMPLETION, TRB_TYPE_LINK,
-    TRB_TYPE_MASK, Trb,
+    TRB_TYPE_MASK, TRB_TYPE_NORMAL, Trb,
 };
 use super::usb::{
     HidBootEndpoint, PortState, SetupRequest, SupportedProtocol, get_descriptor,
@@ -12,6 +13,7 @@ use super::usb::{
 use crate::mm::dma::{DmaBuffer, MmioMapping};
 use crate::pcie::enumrate::{Bdf, MemoryBar, PCIConfigSpace, decode_memory_bar, doit};
 use core::sync::atomic::{Ordering, fence};
+use spin::Mutex;
 
 const POLL_LIMIT: usize = 100_000;
 // USB transfers wait for device and frame scheduling, unlike the controller
@@ -23,6 +25,9 @@ const MIN_BAR_LEN: u64 = 0x1000;
 const EVENT_RING_ENTRIES: usize = 32;
 const COMMAND_RING_ENTRIES: usize = 4096 / core::mem::size_of::<Trb>();
 const TRANSFER_RING_ENTRIES: usize = COMMAND_RING_ENTRIES - 1;
+const POLL_EVENT_BUDGET: usize = 32;
+
+static CONTROLLERS: Mutex<alloc::vec::Vec<usize>> = Mutex::new(alloc::vec::Vec::new());
 
 struct RootDevice {
     port: u8,
@@ -32,8 +37,30 @@ struct RootDevice {
     _ep0_ring: DmaBuffer,
     _device_descriptor: DmaBuffer,
     _configuration_descriptor: DmaBuffer,
-    _interrupt_ring: DmaBuffer,
-    _hid_endpoint: HidBootEndpoint,
+    interrupt_ring: DmaBuffer,
+    report: DmaBuffer,
+    hid_endpoint: HidBootEndpoint,
+    interrupt_producer: usize,
+    interrupt_cycle: bool,
+    input: HidInput,
+}
+
+enum HidInput {
+    Keyboard(KeyboardState),
+    Mouse(MouseState),
+}
+
+impl RootDevice {
+    fn slot(&self) -> u8 {
+        match self.state {
+            PortState::Addressed { slot, .. } => slot,
+            _ => 0,
+        }
+    }
+}
+
+fn endpoint_id(address: u8) -> u8 {
+    ((address & 0x0f) * 2) + u8::from(address & 0x80 != 0)
 }
 
 /// Emit the stable endpoint diagnostic required by the enumeration logs.
@@ -356,6 +383,105 @@ impl ControllerResources {
             unsafe { register.read32(self.op + regs::USBSTS) },
         );
         Err(InitError::Timeout("device descriptor"))
+    }
+
+    fn acknowledge_event(&mut self, register: regs::RegisterBlock) {
+        self.event_consumer = (self.event_consumer + 1) % EVENT_RING_ENTRIES;
+        if self.event_consumer == 0 {
+            self.event_cycle = !self.event_cycle;
+        }
+        self.event_count += 1;
+        unsafe {
+            register.write64(
+                self.runtime + regs::RT_INTR0 + regs::ERDP,
+                self.event_ring.physical_address() + (self.event_consumer * 16) as u64
+                    | regs::ERDP_EHB,
+            );
+            register.write32(self.runtime + regs::RT_INTR0 + regs::IMAN, regs::IMAN_IP);
+            register.write32(self.op + regs::USBSTS, regs::USBSTS_EINT);
+        }
+    }
+
+    fn queue_interrupt_in(register: regs::RegisterBlock, doorbell: usize, device: &mut RootDevice) {
+        let index = device.interrupt_producer;
+        let trb = Trb {
+            parameter: device.report.physical_address(),
+            status: device.hid_endpoint.max_packet_size as u32,
+            control: TRB_TYPE_NORMAL | (1 << 5) | device.interrupt_cycle as u32,
+        };
+        unsafe {
+            core::ptr::write_volatile((device.interrupt_ring.as_ptr() as *mut Trb).add(index), trb);
+        }
+        fence(Ordering::SeqCst);
+        let endpoint_id = endpoint_id(device.hid_endpoint.endpoint_address);
+        unsafe { register.write32(doorbell + device.slot() as usize * 4, endpoint_id as u32) };
+        device.interrupt_producer += 1;
+        if device.interrupt_producer == TRANSFER_RING_ENTRIES {
+            device.interrupt_producer = 0;
+            device.interrupt_cycle = !device.interrupt_cycle;
+            unsafe {
+                core::ptr::write_volatile(
+                    (device.interrupt_ring.as_ptr() as *mut Trb).add(TRANSFER_RING_ENTRIES),
+                    Trb {
+                        parameter: device.interrupt_ring.physical_address(),
+                        control: TRB_TYPE_LINK | TRB_TC | device.interrupt_cycle as u32,
+                        ..Trb::default()
+                    },
+                );
+            }
+        }
+    }
+
+    fn poll(&mut self, budget: usize) {
+        let register = unsafe { regs::RegisterBlock::new(self._mapping.as_ptr()) };
+        for _ in 0..budget {
+            let event = unsafe {
+                core::ptr::read_volatile(
+                    self.event_ring.as_ptr().add(self.event_consumer * 16) as *const Trb
+                )
+            };
+            if (event.control & TRB_CYCLE != 0) != self.event_cycle {
+                break;
+            }
+            self.acknowledge_event(register);
+            if event.control & TRB_TYPE_MASK != super::trb::TRB_TYPE_TRANSFER_EVENT {
+                continue;
+            }
+            let slot = (event.control >> 24) as u8;
+            let endpoint = ((event.control >> 16) & 0x1f) as u8;
+            let Some(device) = self.ports.iter_mut().find(|device| {
+                device.slot() == slot
+                    && endpoint_id(device.hid_endpoint.endpoint_address) == endpoint
+            }) else {
+                continue;
+            };
+            let completion = CompletionCode::from_status(event.status);
+            if !matches!(
+                completion,
+                CompletionCode::Success | CompletionCode::ShortPacket
+            ) {
+                crate::println!(
+                    "[WARN] xhci: transfer failed slot {}, endpoint {}, code {:?}",
+                    slot,
+                    endpoint,
+                    completion
+                );
+                Self::queue_interrupt_in(register, self.doorbell, device);
+                continue;
+            }
+            let residual = (event.status & 0x00ff_ffff) as usize;
+            let max_packet = device.hid_endpoint.max_packet_size as usize;
+            if residual <= max_packet {
+                let report_len = max_packet - residual;
+                let report =
+                    unsafe { core::slice::from_raw_parts(device.report.as_ptr(), report_len) };
+                match &mut device.input {
+                    HidInput::Keyboard(state) => state.submit_report(report),
+                    HidInput::Mouse(state) => state.submit_report(report),
+                }
+            }
+            Self::queue_interrupt_in(register, self.doorbell, device);
+        }
     }
 
     fn submit_command(
@@ -694,7 +820,9 @@ impl ControllerResources {
             endpoint.interval,
             endpoint.max_packet_size
         );
-        Ok(RootDevice {
+        let report = DmaBuffer::new(endpoint.max_packet_size as usize, 64)
+            .map_err(|_| InitError::Allocation)?;
+        let mut device = RootDevice {
             port,
             state: PortState::Addressed {
                 slot,
@@ -706,9 +834,19 @@ impl ControllerResources {
             _ep0_ring: ep0,
             _device_descriptor: descriptor,
             _configuration_descriptor: configuration,
-            _interrupt_ring: interrupt_ring,
-            _hid_endpoint: endpoint,
-        })
+            interrupt_ring,
+            report,
+            hid_endpoint: endpoint,
+            interrupt_producer: 0,
+            interrupt_cycle: true,
+            input: if endpoint.protocol == 1 {
+                HidInput::Keyboard(KeyboardState::new())
+            } else {
+                HidInput::Mouse(MouseState::new())
+            },
+        };
+        Self::queue_interrupt_in(register, self.doorbell, &mut device);
+        Ok(device)
     }
 
     fn log_ep0_context(&self, slot: u8, output: &DmaBuffer) {
@@ -829,8 +967,7 @@ impl ControllerResources {
         ring: &DmaBuffer,
     ) -> Result<(), InitError> {
         let context_size = if self.context_64 { 64 } else { 32 };
-        let endpoint_id = ((endpoint.endpoint_address & 0x0f) as usize) * 2
-            + usize::from(endpoint.endpoint_address & 0x80 != 0);
+        let endpoint_id = endpoint_id(endpoint.endpoint_address) as usize;
         if endpoint_id == 0 || endpoint_id >= 32 {
             return Err(InitError::Command(CompletionCode::TrbError));
         }
@@ -1079,10 +1216,14 @@ fn discover_one(bdf: Bdf, config: &PCIConfigSpace) -> ControllerState {
                 .and_then(|resources| resources.start(mapping_ptr, cap_len, max_slots, context_64))
             {
                 Ok(resources) => {
-                    // The controller owns these DMA buffers until shutdown. The
-                    // first release has no teardown path, so retain them for the
-                    // lifetime of the kernel.
-                    let _ = alloc::boxed::Box::leak(alloc::boxed::Box::new(resources));
+                    // These resources contain HHDM/MMIO pointers and are not
+                    // Send. Keep each controller at a stable kernel-lifetime
+                    // address; poll() accesses it only while CONTROLLERS is
+                    // locked and no xHCI interrupt handler exists yet.
+                    let controller = alloc::boxed::Box::leak(alloc::boxed::Box::new(resources));
+                    CONTROLLERS
+                        .lock()
+                        .push(controller as *mut ControllerResources as usize);
                     ControllerState::Reset
                 }
                 Err(InitError::Timeout(stage)) => {
@@ -1146,6 +1287,19 @@ pub fn init() {
         }
     });
     crate::println!("[INFO] xhci: discovered {} controller(s)", count);
+}
+
+/// Consume a bounded number of HID transfer events for every live controller.
+/// This is deliberately called from the kernel idle path rather than an IDT
+/// handler, so report decoding and terminal submission never run in interrupt
+/// context.
+pub fn poll() {
+    let controllers = CONTROLLERS.lock();
+    for &controller in controllers.iter() {
+        // Entries are leaked only after successful initialization and remain
+        // valid until kernel shutdown.  Access is serialized by this mutex.
+        unsafe { (&mut *(controller as *mut ControllerResources)).poll(POLL_EVENT_BUDGET) };
+    }
 }
 
 /// Run the controller lifecycle's pure bounded-wait checks in kernel context.

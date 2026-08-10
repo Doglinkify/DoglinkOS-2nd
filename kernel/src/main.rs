@@ -93,7 +93,7 @@ extern "C" fn kmain() -> ! {
                 out("rcx") _,
             );
             if !DoglinkOS_2nd::vfs::has_cmdline_flag("ps2_poll") {
-                hang();
+                idle();
             } else {
                 loop {
                     DoglinkOS_2nd::inputdev::poll_once();
@@ -126,4 +126,14 @@ fn rust_panic(info: &core::panic::PanicInfo) -> ! {
 #[allow(clippy::empty_loop)]
 fn hang() -> ! {
     loop {}
+}
+
+fn idle() -> ! {
+    loop {
+        DoglinkOS_2nd::xhci::poll();
+        // Polling consumes only a bounded event batch.  Sleeping until the
+        // next hardware interrupt avoids burning a core when no USB device is
+        // present; USB event delivery remains polling-only until MSI support.
+        unsafe { asm!("hlt") };
+    }
 }

@@ -18,6 +18,7 @@ pub const TRB_TYPE_EVENT_DATA: u32 = 7 << TRB_TYPE_SHIFT;
 pub const TRB_TYPE_COMMAND_COMPLETION: u32 = 33 << TRB_TYPE_SHIFT;
 pub const TRB_TYPE_TRANSFER_EVENT: u32 = 32 << TRB_TYPE_SHIFT;
 pub const TRB_TYPE_SETUP_STAGE: u32 = 2 << TRB_TYPE_SHIFT;
+pub const TRB_TYPE_NORMAL: u32 = 1 << TRB_TYPE_SHIFT;
 pub const TRB_TYPE_DATA_STAGE: u32 = 3 << TRB_TYPE_SHIFT;
 pub const TRB_TYPE_STATUS_STAGE: u32 = 4 << TRB_TYPE_SHIFT;
 
@@ -29,8 +30,9 @@ pub enum CompletionCode {
     DataBufferError = 2,
     TrbError = 5,
     StallError = 6,
-    RingUnderrun = 13,
-    RingOverrun = 14,
+    ShortPacket = 13,
+    RingUnderrun = 14,
+    RingOverrun = 15,
     EventRingFull = 21,
     CommandAborted = 25,
     Stop = 26,
@@ -48,8 +50,9 @@ impl CompletionCode {
             5 => Self::TrbError,
             6 => Self::StallError,
             9 => Self::NoSlotsAvailable,
-            13 => Self::RingUnderrun,
-            14 => Self::RingOverrun,
+            13 => Self::ShortPacket,
+            14 => Self::RingUnderrun,
+            15 => Self::RingOverrun,
             19 => Self::ContextStateError,
             21 => Self::EventRingFull,
             25 => Self::CommandAborted,

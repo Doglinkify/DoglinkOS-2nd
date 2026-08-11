@@ -57,7 +57,14 @@ pub const PORTSC_PED: u32 = 1 << 1;
 pub const PORTSC_PR: u32 = 1 << 4;
 pub const PORTSC_PP: u32 = 1 << 9;
 pub const PORTSC_CSC: u32 = 1 << 17;
+pub const PORTSC_PEC: u32 = 1 << 18;
+pub const PORTSC_WRC: u32 = 1 << 19;
+pub const PORTSC_OCC: u32 = 1 << 20;
 pub const PORTSC_PRC: u32 = 1 << 21;
+pub const PORTSC_PLC: u32 = 1 << 22;
+pub const PORTSC_CEC: u32 = 1 << 23;
+pub const PORTSC_CHANGE_MASK: u32 =
+    PORTSC_CSC | PORTSC_PEC | PORTSC_WRC | PORTSC_OCC | PORTSC_PRC | PORTSC_PLC | PORTSC_CEC;
 pub const DB_TARGET: u32 = 0;
 pub const RT_INTR0: usize = 0x20;
 pub const IMAN: usize = 0x00;

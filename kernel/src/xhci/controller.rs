@@ -4,11 +4,12 @@ use super::hid::{KeyboardState, MouseState};
 use super::regs;
 use super::trb::{
     CompletionCode, TRB_CHAIN, TRB_CYCLE, TRB_TC, TRB_TYPE_COMMAND_COMPLETION, TRB_TYPE_LINK,
-    TRB_TYPE_MASK, TRB_TYPE_NORMAL, Trb,
+    TRB_TYPE_MASK, TRB_TYPE_NORMAL, Trb, port_status_change_event,
 };
 use super::usb::{
-    HidBootEndpoint, PortState, SetupRequest, SupportedProtocol, get_descriptor,
-    parse_configuration, set_configuration, set_idle, supported_protocol, usb2_max_packet,
+    HidBootEndpoint, PortRecord, PortState, RootPortState, SetupRequest, SupportedProtocol,
+    get_descriptor, parse_configuration, set_configuration, set_idle, supported_protocol,
+    usb2_max_packet,
 };
 use crate::mm::dma::{DmaBuffer, MmioMapping};
 use crate::pcie::enumrate::{Bdf, MemoryBar, PCIConfigSpace, decode_memory_bar, doit};
@@ -171,6 +172,8 @@ struct ControllerResources {
     op: usize,
     context_64: bool,
     ports: alloc::vec::Vec<RootDevice>,
+    root_ports: alloc::vec::Vec<PortRecord>,
+    protocols: alloc::vec::Vec<SupportedProtocol>,
     interrupt_pending: AtomicBool,
     interrupt_count: AtomicUsize,
     msi_vector: Option<u8>,
@@ -244,6 +247,8 @@ impl ControllerResources {
             op: 0,
             context_64: false,
             ports: alloc::vec::Vec::new(),
+            root_ports: alloc::vec::Vec::new(),
+            protocols: alloc::vec::Vec::new(),
             interrupt_pending: AtomicBool::new(false),
             interrupt_count: AtomicUsize::new(0),
             msi_vector: None,
@@ -506,6 +511,10 @@ impl ControllerResources {
                 break;
             }
             self.acknowledge_event(register);
+            if let Some(change) = port_status_change_event(event) {
+                self.handle_port_status_change(register, change.port_id);
+                continue;
+            }
             if event.control & TRB_TYPE_MASK != super::trb::TRB_TYPE_TRANSFER_EVENT {
                 continue;
             }
@@ -707,7 +716,17 @@ impl ControllerResources {
                 });
             }
         }
-        for protocol in protocols {
+        self.protocols = protocols;
+        self.root_ports = self
+            .protocols
+            .iter()
+            .filter(|protocol| protocol.usb2)
+            .flat_map(|protocol| {
+                (protocol.port_start..protocol.port_start.saturating_add(protocol.port_count))
+                    .map(move |port| PortRecord::new(port, *protocol, 0))
+            })
+            .collect();
+        for protocol in self.protocols.clone() {
             if !protocol.usb2 {
                 crate::println!(
                     "[INFO] xhci: skipping USB {}.{} root ports {}..{}",
@@ -725,7 +744,22 @@ impl ControllerResources {
                 }
                 let offset = self.op + regs::PORTSC + (port as usize - 1) * 0x10;
                 let portsc = unsafe { register.read32(offset) };
+                if let Some(record) = self
+                    .root_ports
+                    .iter_mut()
+                    .find(|record| record.port == port)
+                {
+                    record.portsc = portsc & !regs::PORTSC_CHANGE_MASK;
+                    record.mark_stage(RootPortState::Enumerating);
+                }
                 if portsc & regs::PORTSC_CCS == 0 {
+                    if let Some(record) = self
+                        .root_ports
+                        .iter_mut()
+                        .find(|record| record.port == port)
+                    {
+                        record.mark_stage(RootPortState::Disconnected);
+                    }
                     continue;
                 }
                 let speed = ((portsc >> 10) & 0xf) as u8;
@@ -765,15 +799,52 @@ impl ControllerResources {
                             product,
                         );
                         self.ports.push(device);
+                        if let Some(record) = self
+                            .root_ports
+                            .iter_mut()
+                            .find(|record| record.port == port)
+                        {
+                            record.mark_active();
+                        }
                     }
-                    Err(error) => crate::println!(
-                        "[WARN] xhci: port {} enumeration failed: {:?}",
-                        port,
-                        error
-                    ),
+                    Err(error) => {
+                        if let Some(record) = self
+                            .root_ports
+                            .iter_mut()
+                            .find(|record| record.port == port)
+                        {
+                            record.mark_failed(0);
+                        }
+                        crate::println!(
+                            "[WARN] xhci: port {} enumeration failed: {:?}",
+                            port,
+                            error
+                        )
+                    }
                 }
             }
         }
+    }
+
+    fn handle_port_status_change(&mut self, register: regs::RegisterBlock, port: u8) {
+        if port == 0 {
+            return;
+        }
+        let offset = self.op + regs::PORTSC + (port as usize - 1) * 0x10;
+        let value = unsafe { register.read32(offset) };
+        let changes = value & regs::PORTSC_CHANGE_MASK;
+        if changes != 0 {
+            // PORTSC change bits are W1C; acknowledge all known causes at once.
+            unsafe { register.write32(offset, (value & !regs::PORTSC_CHANGE_MASK) | changes) };
+        }
+        let Some(record) = self
+            .root_ports
+            .iter_mut()
+            .find(|record| record.port == port)
+        else {
+            return;
+        };
+        record.observe(value, self.event_count as u64);
     }
 
     fn reset_port(&self, register: regs::RegisterBlock, offset: usize) -> bool {

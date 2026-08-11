@@ -17,6 +17,7 @@ pub const TRB_TYPE_LINK: u32 = 6 << TRB_TYPE_SHIFT;
 pub const TRB_TYPE_EVENT_DATA: u32 = 7 << TRB_TYPE_SHIFT;
 pub const TRB_TYPE_COMMAND_COMPLETION: u32 = 33 << TRB_TYPE_SHIFT;
 pub const TRB_TYPE_TRANSFER_EVENT: u32 = 32 << TRB_TYPE_SHIFT;
+pub const TRB_TYPE_PORT_STATUS_CHANGE: u32 = 34 << TRB_TYPE_SHIFT;
 pub const TRB_TYPE_SETUP_STAGE: u32 = 2 << TRB_TYPE_SHIFT;
 pub const TRB_TYPE_NORMAL: u32 = 1 << TRB_TYPE_SHIFT;
 pub const TRB_TYPE_DATA_STAGE: u32 = 3 << TRB_TYPE_SHIFT;
@@ -39,6 +40,20 @@ pub enum CompletionCode {
     ContextStateError = 19,
     NoSlotsAvailable = 9,
     Unknown = 255,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PortStatusChangeEvent {
+    pub port_id: u8,
+}
+
+/// Decode the xHCI Port Status Change Event TRB without touching MMIO.
+pub fn port_status_change_event(event: Trb) -> Option<PortStatusChangeEvent> {
+    if event.control & TRB_TYPE_MASK != TRB_TYPE_PORT_STATUS_CHANGE {
+        return None;
+    }
+    let port_id = (event.parameter & 0xff) as u8;
+    (port_id != 0).then_some(PortStatusChangeEvent { port_id })
 }
 
 impl CompletionCode {
@@ -81,5 +96,21 @@ pub fn test() {
     assert_eq!(
         CompletionCode::from_status(1 << 24),
         CompletionCode::Success
+    );
+    assert_eq!(
+        port_status_change_event(Trb {
+            parameter: 7,
+            control: TRB_TYPE_PORT_STATUS_CHANGE | TRB_CYCLE,
+            ..Trb::default()
+        }),
+        Some(PortStatusChangeEvent { port_id: 7 })
+    );
+    assert_eq!(
+        port_status_change_event(Trb {
+            parameter: 0,
+            control: TRB_TYPE_PORT_STATUS_CHANGE,
+            ..Trb::default()
+        }),
+        None
     );
 }

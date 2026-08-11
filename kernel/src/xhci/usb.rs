@@ -10,6 +10,93 @@ pub struct SupportedProtocol {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RootPortState {
+    Disconnected,
+    Debouncing { until: u64 },
+    Resetting,
+    Enumerating,
+    Active,
+    Removing,
+    Failed { retry_at: u64, failures: u8 },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PortRecord {
+    pub port: u8,
+    pub protocol: SupportedProtocol,
+    pub portsc: u32,
+    pub generation: u64,
+    pub state: RootPortState,
+}
+
+impl PortRecord {
+    pub const DEBOUNCE_TICKS: u64 = 8;
+    pub const RETRY_BASE_TICKS: u64 = 64;
+    pub const RETRY_MAX_TICKS: u64 = 4096;
+
+    pub const fn new(port: u8, protocol: SupportedProtocol, portsc: u32) -> Self {
+        Self {
+            port,
+            protocol,
+            portsc,
+            generation: 0,
+            state: RootPortState::Disconnected,
+        }
+    }
+
+    pub fn acknowledge_changes(&mut self, portsc: u32) -> u32 {
+        let changes = portsc & crate::xhci::regs::PORTSC_CHANGE_MASK;
+        self.portsc = portsc & !crate::xhci::regs::PORTSC_CHANGE_MASK;
+        changes
+    }
+
+    pub fn observe(&mut self, portsc: u32, now: u64) -> u32 {
+        let was_connected = self.portsc & crate::xhci::regs::PORTSC_CCS != 0;
+        let changes = self.acknowledge_changes(portsc);
+        let connected = portsc & crate::xhci::regs::PORTSC_CCS != 0;
+        if changes != 0 || connected != was_connected {
+            self.generation = self.generation.wrapping_add(1);
+            self.state = if connected {
+                RootPortState::Debouncing {
+                    until: now.saturating_add(Self::DEBOUNCE_TICKS),
+                }
+            } else {
+                RootPortState::Removing
+            };
+        }
+        self.portsc = portsc & !crate::xhci::regs::PORTSC_CHANGE_MASK;
+        changes
+    }
+
+    pub fn mark_active(&mut self) {
+        self.state = RootPortState::Active;
+    }
+    pub fn mark_stage(&mut self, state: RootPortState) {
+        self.state = state;
+    }
+    pub fn generation_matches(&self, generation: u64) -> bool {
+        self.generation == generation
+    }
+
+    pub fn mark_failed(&mut self, now: u64) {
+        let failures = match self.state {
+            RootPortState::Failed { failures, .. } => failures.saturating_add(1),
+            _ => 1,
+        };
+        let shift = failures.saturating_sub(1).min(6) as u32;
+        let delay = (Self::RETRY_BASE_TICKS << shift).min(Self::RETRY_MAX_TICKS);
+        self.state = RootPortState::Failed {
+            retry_at: now.saturating_add(delay),
+            failures,
+        };
+    }
+
+    pub fn retry_due(&self, now: u64) -> bool {
+        matches!(self.state, RootPortState::Failed { retry_at, .. } if now >= retry_at)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DescriptorError {
     Truncated,
     ZeroLength,
@@ -306,4 +393,40 @@ pub fn test() {
     );
     assert_eq!(get_descriptor(2, 9).value, 2 << 8);
     assert_eq!(set_configuration(3).value, 3);
+    let protocol = SupportedProtocol {
+        major: 2,
+        minor: 0,
+        port_start: 1,
+        port_count: 1,
+        usb2: true,
+    };
+    let mut record = PortRecord::new(1, protocol, 0);
+    assert_eq!(
+        record.observe(
+            crate::xhci::regs::PORTSC_CCS | crate::xhci::regs::PORTSC_CSC,
+            10
+        ),
+        crate::xhci::regs::PORTSC_CSC
+    );
+    assert!(matches!(
+        record.state,
+        RootPortState::Debouncing { until: 18 }
+    ));
+    let generation = record.generation;
+    assert!(record.generation_matches(generation));
+    assert!(!record.generation_matches(generation.wrapping_sub(1)));
+    record.mark_failed(20);
+    assert!(!record.retry_due(20));
+    assert!(record.retry_due(84));
+    record.mark_failed(84);
+    assert!(!record.retry_due(148));
+    assert!(record.retry_due(212));
+    record.observe(crate::xhci::regs::PORTSC_PEC, 90);
+    assert_eq!(
+        record.acknowledge_changes(crate::xhci::regs::PORTSC_PEC),
+        crate::xhci::regs::PORTSC_PEC
+    );
+    record.mark_active();
+    record.observe(crate::xhci::regs::PORTSC_CSC, 100);
+    assert_eq!(record.state, RootPortState::Removing);
 }

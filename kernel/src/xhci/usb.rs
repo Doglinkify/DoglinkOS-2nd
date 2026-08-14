@@ -121,112 +121,227 @@ pub struct HidBootEndpoint {
     pub protocol: u8,
 }
 
-/// Select one HID Boot keyboard or mouse interface from a complete
-/// configuration descriptor.  Unknown descriptors and alternate settings are
-/// skipped, while malformed descriptor framing is rejected.
-pub fn parse_hid_boot_endpoint(data: &[u8]) -> Result<HidBootEndpoint, DescriptorError> {
-    let mut offset = 0usize;
-    let mut configuration = None;
-    let mut interface: Option<(u8, u8, u8)> = None;
-    let mut selected = None;
-    while offset < data.len() {
-        if data.len() - offset < 2 {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct InterfaceDescriptor {
+    pub number: u8,
+    pub alternate_setting: u8,
+    pub class: u8,
+    pub subclass: u8,
+    pub protocol: u8,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct EndpointDescriptor {
+    pub address: u8,
+    pub attributes: u8,
+    pub max_packet_size: u16,
+    pub interval: u8,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MscBotInterface {
+    pub configuration_value: u8,
+    pub interface_number: u8,
+    pub bulk_in: EndpointDescriptor,
+    pub bulk_out: EndpointDescriptor,
+}
+
+/// A checked view of one complete configuration descriptor.  Iteration never
+/// exposes a descriptor whose declared length lies outside `wTotalLength`.
+pub struct ConfigurationDescriptor<'a> {
+    bytes: &'a [u8],
+    pub value: u8,
+}
+
+impl<'a> ConfigurationDescriptor<'a> {
+    pub fn parse(data: &'a [u8]) -> Result<Self, DescriptorError> {
+        if data.len() < 2 {
             return Err(DescriptorError::Truncated);
         }
-        let length = data[offset] as usize;
+        if data[0] == 0 {
+            return Err(DescriptorError::ZeroLength);
+        }
+        if data[1] != 2 {
+            return Err(DescriptorError::MissingConfiguration);
+        }
+        // USB configuration descriptors have the fixed 9-byte layout.
+        if data[0] != 9 {
+            return Err(DescriptorError::InvalidLength);
+        }
+        if data.len() < 9 {
+            return Err(DescriptorError::Truncated);
+        }
+        let total = u16::from_le_bytes([data[2], data[3]]) as usize;
+        if total < 9 || total > data.len() {
+            return Err(DescriptorError::Truncated);
+        }
+        if data[5] == 0 {
+            return Err(DescriptorError::MissingConfiguration);
+        }
+        Ok(Self {
+            bytes: &data[..total],
+            value: data[5],
+        })
+    }
+
+    pub fn descriptors(&self) -> DescriptorIter<'a> {
+        DescriptorIter {
+            bytes: self.bytes,
+            offset: 9,
+        }
+    }
+}
+
+pub struct DescriptorIter<'a> {
+    bytes: &'a [u8],
+    offset: usize,
+}
+
+impl<'a> DescriptorIter<'a> {
+    fn next_raw(&mut self) -> Result<Option<&'a [u8]>, DescriptorError> {
+        if self.offset == self.bytes.len() {
+            return Ok(None);
+        }
+        if self.bytes.len() - self.offset < 2 {
+            return Err(DescriptorError::Truncated);
+        }
+        let length = self.bytes[self.offset] as usize;
         if length == 0 {
             return Err(DescriptorError::ZeroLength);
         }
         if length < 2 {
             return Err(DescriptorError::InvalidLength);
         }
-        let end = offset
+        let end = self
+            .offset
             .checked_add(length)
             .ok_or(DescriptorError::Truncated)?;
-        if end > data.len() {
+        if end > self.bytes.len() {
             return Err(DescriptorError::Truncated);
         }
-        let kind = data[offset + 1];
-        match kind {
-            2 => {
-                if length < 9 {
+        let descriptor = &self.bytes[self.offset..end];
+        self.offset = end;
+        Ok(Some(descriptor))
+    }
+
+    pub fn next_interface(&mut self) -> Result<Option<InterfaceDescriptor>, DescriptorError> {
+        while let Some(raw) = self.next_raw()? {
+            if raw[1] == 4 {
+                if raw.len() < 9 {
                     return Err(DescriptorError::InvalidLength);
                 }
-                let total = u16::from_le_bytes([data[offset + 2], data[offset + 3]]) as usize;
-                if total < length || total > data.len() {
-                    return Err(DescriptorError::Truncated);
-                }
-                configuration = Some(data[offset + 5]);
+                return Ok(Some(InterfaceDescriptor {
+                    number: raw[2],
+                    alternate_setting: raw[3],
+                    class: raw[5],
+                    subclass: raw[6],
+                    protocol: raw[7],
+                }));
             }
-            4 => {
-                if length < 9 {
-                    return Err(DescriptorError::InvalidLength);
-                }
-                let number = data[offset + 2];
-                let alternate = data[offset + 3];
-                let class = data[offset + 5];
-                let subclass = data[offset + 6];
-                let protocol = data[offset + 7];
-                interface = if alternate == 0
-                    && class == 0x03
-                    && subclass == 0x01
-                    && (protocol == 0x01 || protocol == 0x02)
-                {
-                    Some((number, protocol, alternate))
-                } else {
-                    None
-                };
-            }
-            5 => {
-                if length < 7 {
-                    // An endpoint descriptor is meaningful only inside a
-                    // selected interface.  Reject a malformed one there;
-                    // unrelated class-specific descriptors remain skippable.
-                    if interface.is_some() {
-                        return Err(DescriptorError::InvalidLength);
-                    }
-                    offset = end;
-                    continue;
-                }
-                if let Some((number, protocol, 0)) = interface {
-                    let address = data[offset + 2];
-                    let attributes = data[offset + 3] & 0x03;
-                    let max_packet =
-                        u16::from_le_bytes([data[offset + 4], data[offset + 5]]) & 0x07ff;
-                    if address & 0x80 != 0
-                        && attributes == 0x03
-                        && max_packet != 0
-                        && data[offset + 6] != 0
-                    {
-                        if selected.is_some() {
-                            return Err(DescriptorError::Unsupported);
-                        }
-                        selected = Some(HidBootEndpoint {
-                            configuration_value: configuration.unwrap_or(0),
-                            interface_number: number,
-                            endpoint_address: address,
-                            max_packet_size: max_packet,
-                            interval: data[offset + 6],
-                            protocol,
-                        });
-                    }
-                }
-            }
-            _ => {}
         }
-        offset = end;
+        Ok(None)
     }
-    let endpoint = selected.ok_or(DescriptorError::Unsupported)?;
-    if endpoint.configuration_value == 0 {
-        return Err(DescriptorError::MissingConfiguration);
+
+    pub fn next_endpoint(&mut self) -> Result<Option<EndpointDescriptor>, DescriptorError> {
+        while self.offset < self.bytes.len() {
+            let start = self.offset;
+            let raw = match self.next_raw()? {
+                Some(raw) => raw,
+                None => return Ok(None),
+            };
+            if raw[1] == 4 {
+                // Leave the next interface for next_interface().
+                self.offset = start;
+                return Ok(None);
+            }
+            if raw[1] == 5 {
+                if raw.len() < 7 {
+                    return Err(DescriptorError::InvalidLength);
+                }
+                return Ok(Some(EndpointDescriptor {
+                    address: raw[2],
+                    attributes: raw[3] & 0x03,
+                    max_packet_size: u16::from_le_bytes([raw[4], raw[5]]) & 0x07ff,
+                    interval: raw[6],
+                }));
+            }
+        }
+        Ok(None)
     }
-    // The interval is consumed by the xHCI endpoint context, where zero is
-    // invalid for interrupt endpoints even though the descriptor framing is
-    // otherwise valid.
-    if endpoint.interval == 0 {
-        return Err(DescriptorError::InvalidLength);
+}
+
+/// Select one HID Boot keyboard or mouse endpoint from a checked descriptor.
+pub fn parse_hid_boot_endpoint(data: &[u8]) -> Result<HidBootEndpoint, DescriptorError> {
+    let configuration = ConfigurationDescriptor::parse(data)?;
+    let mut descriptors = configuration.descriptors();
+    let mut selected = None;
+    while let Some(interface) = descriptors.next_interface()? {
+        let hid_boot = interface.alternate_setting == 0
+            && interface.class == 0x03
+            && interface.subclass == 0x01
+            && (interface.protocol == 1 || interface.protocol == 2);
+        while let Some(endpoint) = descriptors.next_endpoint()? {
+            if hid_boot
+                && endpoint.address & 0x80 != 0
+                && endpoint.attributes == 0x03
+                && endpoint.max_packet_size != 0
+                && endpoint.interval != 0
+            {
+                if selected.is_some() {
+                    return Err(DescriptorError::Unsupported);
+                }
+                selected = Some(HidBootEndpoint {
+                    configuration_value: configuration.value,
+                    interface_number: interface.number,
+                    endpoint_address: endpoint.address,
+                    max_packet_size: endpoint.max_packet_size,
+                    interval: endpoint.interval,
+                    protocol: interface.protocol,
+                });
+            }
+        }
     }
-    Ok(endpoint)
+    selected.ok_or(DescriptorError::Unsupported)
+}
+
+/// Select one Mass Storage / SCSI transparent / Bulk-Only interface.
+pub fn parse_msc_bot_interface(data: &[u8]) -> Result<MscBotInterface, DescriptorError> {
+    let configuration = ConfigurationDescriptor::parse(data)?;
+    let mut descriptors = configuration.descriptors();
+    let mut selected = None;
+    while let Some(interface) = descriptors.next_interface()? {
+        let bot = interface.alternate_setting == 0
+            && interface.class == 0x08
+            && interface.subclass == 0x06
+            && interface.protocol == 0x50;
+        let (mut bulk_in, mut bulk_out) = (None, None);
+        while let Some(endpoint) = descriptors.next_endpoint()? {
+            if bot && endpoint.attributes == 0x02 && endpoint.max_packet_size != 0 {
+                let target = if endpoint.address & 0x80 != 0 {
+                    &mut bulk_in
+                } else {
+                    &mut bulk_out
+                };
+                if target.replace(endpoint).is_some() {
+                    return Err(DescriptorError::Unsupported);
+                }
+            }
+        }
+        if bot {
+            if let (Some(bulk_in), Some(bulk_out)) = (bulk_in, bulk_out) {
+                if selected.is_some() {
+                    return Err(DescriptorError::Unsupported);
+                }
+                selected = Some(MscBotInterface {
+                    configuration_value: configuration.value,
+                    interface_number: interface.number,
+                    bulk_in,
+                    bulk_out,
+                });
+            }
+        }
+    }
+    selected.ok_or(DescriptorError::Unsupported)
 }
 
 /// Compatibility name used by the controller enumeration state machine.
@@ -372,9 +487,48 @@ pub fn test() {
         9, 2, 25, 0, 1, 1, 0, 0x80, 50, 9, 4, 0, 0, 1, 3, 1, 1, 0, 7, 5, 0x81, 3, 8, 0, 10,
     ];
     assert_eq!(parse_hid_boot_endpoint(&config).unwrap().interval, 10);
+    let zero_configuration_value = [
+        9, 2, 25, 0, 1, 0, 0, 0x80, 50, 9, 4, 0, 0, 1, 3, 1, 1, 0, 7, 5, 0x81, 3, 8, 0, 10,
+    ];
+    assert_eq!(
+        parse_hid_boot_endpoint(&zero_configuration_value),
+        Err(DescriptorError::MissingConfiguration)
+    );
+    let mixed = [
+        9, 2, 48, 0, 2, 1, 0, 0x80, 50, 9, 4, 0, 0, 1, 3, 1, 1, 0, 7, 5, 0x81, 3, 8, 0, 10, 9, 4,
+        1, 0, 2, 8, 6, 0x50, 0, 7, 5, 0x02, 2, 64, 0, 0, 7, 5, 0x83, 2, 64, 0, 0,
+    ];
+    let msc = parse_msc_bot_interface(&mixed).unwrap();
+    assert_eq!(msc.interface_number, 1);
+    assert_eq!(msc.bulk_out.address, 0x02);
+    assert_eq!(msc.bulk_in.address, 0x83);
+    assert_eq!(parse_hid_boot_endpoint(&mixed).unwrap().interface_number, 0);
+    let alternate_only = [
+        9, 2, 32, 0, 1, 1, 0, 0x80, 50, 9, 4, 0, 1, 2, 8, 6, 0x50, 0, 7, 5, 0x02, 2, 64, 0, 0, 7,
+        5, 0x83, 2, 64, 0, 0,
+    ];
+    assert_eq!(
+        parse_msc_bot_interface(&alternate_only),
+        Err(DescriptorError::Unsupported)
+    );
+    let missing_bulk_out = [
+        9, 2, 25, 0, 1, 1, 0, 0x80, 50, 9, 4, 0, 0, 1, 8, 6, 0x50, 0, 7, 5, 0x81, 2, 64, 0, 0,
+    ];
+    assert_eq!(
+        parse_msc_bot_interface(&missing_bulk_out),
+        Err(DescriptorError::Unsupported)
+    );
     assert_eq!(
         parse_hid_boot_endpoint(&[0, 2]).unwrap_err(),
         DescriptorError::ZeroLength
+    );
+    assert_eq!(
+        parse_hid_boot_endpoint(&[1, 2]).unwrap_err(),
+        DescriptorError::InvalidLength
+    );
+    assert_eq!(
+        parse_hid_boot_endpoint(&[10, 2, 10, 0, 0, 1, 0, 0x80, 50, 0]).unwrap_err(),
+        DescriptorError::InvalidLength
     );
     assert_eq!(
         parse_hid_boot_endpoint(&[9, 2, 0]).unwrap_err(),

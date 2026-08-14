@@ -26,6 +26,8 @@ const EVENT_RING_ENTRIES: usize = 32;
 const COMMAND_RING_ENTRIES: usize = 4096 / core::mem::size_of::<Trb>();
 const TRANSFER_RING_ENTRIES: usize = COMMAND_RING_ENTRIES - 1;
 const POLL_EVENT_BUDGET: usize = 32;
+const ROOT_PORT_WORK_BUDGET: usize = 2;
+const ROOT_PORT_RESCAN_INTERVAL: u64 = 256;
 const PCI_CAP_ID_MSI: u8 = 0x05;
 const MSI_CONTROL_ENABLE: u16 = 1;
 const MSI_CONTROL_MME_MASK: u16 = 0b111 << 4;
@@ -63,6 +65,7 @@ fn register_controller(controller: *mut ControllerResources) -> bool {
 
 struct RootDevice {
     port: u8,
+    generation: u64,
     state: PortState,
     _input_context: DmaBuffer,
     _output_context: DmaBuffer,
@@ -178,6 +181,8 @@ struct ControllerResources {
     interrupt_count: AtomicUsize,
     msi_vector: Option<u8>,
     logged_interrupt_count: usize,
+    poll_ticks: u64,
+    healthy: bool,
 }
 
 impl ControllerResources {
@@ -253,6 +258,8 @@ impl ControllerResources {
             interrupt_count: AtomicUsize::new(0),
             msi_vector: None,
             logged_interrupt_count: 0,
+            poll_ticks: 0,
+            healthy: true,
         })
     }
 
@@ -357,6 +364,10 @@ impl ControllerResources {
                 );
                 register.write32(self.op + regs::USBSTS, regs::USBSTS_EINT);
             }
+            if let Some(change) = port_status_change_event(trb) {
+                self.handle_port_status_change(register, change.port_id);
+                continue;
+            }
             if let Some(code) = command_completion(trb, command_address) {
                 return if code == CompletionCode::Success {
                     Ok((trb.control >> 24) as u8)
@@ -411,6 +422,10 @@ impl ControllerResources {
                     (iman & regs::IMAN_IE) | regs::IMAN_IP,
                 );
                 register.write32(self.op + regs::USBSTS, regs::USBSTS_EINT);
+            }
+            if let Some(change) = port_status_change_event(event) {
+                self.handle_port_status_change(register, change.port_id);
+                continue;
             }
             // The normal parameter is the TRB carrying IOC.  Accept any TRB
             // in this control TD as well: older QEMU/xHCI combinations have
@@ -489,7 +504,11 @@ impl ControllerResources {
     }
 
     fn poll(&mut self, budget: usize) {
+        if !self.healthy {
+            return;
+        }
         let register = unsafe { regs::RegisterBlock::new(self._mapping.as_ptr()) };
+        self.poll_ticks = self.poll_ticks.wrapping_add(1);
         if self.interrupt_pending.swap(false, Ordering::AcqRel) {
             let count = self.interrupt_count.load(Ordering::Acquire);
             if self.logged_interrupt_count == 0 {
@@ -520,9 +539,20 @@ impl ControllerResources {
             }
             let slot = (event.control >> 24) as u8;
             let endpoint = ((event.control >> 16) & 0x1f) as u8;
+            let generation = self
+                .ports
+                .iter()
+                .find(|device| device.slot() == slot)
+                .and_then(|device| {
+                    self.root_ports.iter().find_map(|record| {
+                        (record.port == device.port && record.state == RootPortState::Active)
+                            .then_some(record.generation)
+                    })
+                });
             let Some(device) = self.ports.iter_mut().find(|device| {
                 device.slot() == slot
                     && endpoint_id(device.hid_endpoint.endpoint_address) == endpoint
+                    && generation == Some(device.generation)
             }) else {
                 continue;
             };
@@ -553,6 +583,7 @@ impl ControllerResources {
             }
             Self::queue_interrupt_in(register, self.doorbell, device);
         }
+        self.service_root_ports(register);
     }
 
     fn enable_msi(&mut self, config: &PCIConfigSpace, bdf: Bdf) {
@@ -779,7 +810,13 @@ impl ControllerResources {
                 let portsc = unsafe { register.read32(offset) };
                 let speed = ((portsc >> 10) & 0xf) as u8;
                 crate::println!("[INFO] xhci: port {} reset complete, speed {}", port, speed);
-                match self.address_port(register, port, speed) {
+                let generation = self
+                    .root_ports
+                    .iter()
+                    .find(|record| record.port == port)
+                    .map(|record| record.generation)
+                    .unwrap_or(0);
+                match self.address_port(register, port, speed, generation) {
                     Ok(device) => {
                         let desc = unsafe {
                             core::slice::from_raw_parts(device._device_descriptor.as_ptr(), 18)
@@ -844,7 +881,255 @@ impl ControllerResources {
         else {
             return;
         };
-        record.observe(value, self.event_count as u64);
+        if value & regs::PORTSC_CCS != 0
+            && matches!(record.state, RootPortState::Active)
+            && self.ports.iter().any(|device| device.port == port)
+        {
+            record.portsc = value & !regs::PORTSC_CHANGE_MASK;
+            return;
+        }
+        record.observe(value, self.poll_ticks);
+    }
+
+    fn port_offset(&self, port: u8) -> usize {
+        self.op + regs::PORTSC + (port as usize - 1) * 0x10
+    }
+
+    fn observe_port(&mut self, register: regs::RegisterBlock, port: u8) {
+        let value = unsafe { register.read32(self.port_offset(port)) };
+        let changes = value & regs::PORTSC_CHANGE_MASK;
+        if changes != 0 {
+            unsafe {
+                register.write32(
+                    self.port_offset(port),
+                    (value & !regs::PORTSC_CHANGE_MASK) | changes,
+                )
+            };
+        }
+        if let Some(record) = self
+            .root_ports
+            .iter_mut()
+            .find(|record| record.port == port)
+        {
+            if value & regs::PORTSC_CCS != 0
+                && matches!(record.state, RootPortState::Active)
+                && self.ports.iter().any(|device| device.port == port)
+            {
+                record.portsc = value & !regs::PORTSC_CHANGE_MASK;
+                return;
+            }
+            record.observe(value, self.poll_ticks);
+        }
+    }
+
+    fn service_root_ports(&mut self, register: regs::RegisterBlock) {
+        if self.poll_ticks % ROOT_PORT_RESCAN_INTERVAL == 0 {
+            let ports: alloc::vec::Vec<u8> =
+                self.root_ports.iter().map(|record| record.port).collect();
+            for port in ports {
+                self.observe_port(register, port);
+            }
+        }
+
+        for _ in 0..ROOT_PORT_WORK_BUDGET {
+            let next = self
+                .root_ports
+                .iter()
+                .find_map(|record| match record.state {
+                    RootPortState::Removing => Some((record.port, record.generation, false)),
+                    RootPortState::Debouncing { until } if self.poll_ticks >= until => {
+                        Some((record.port, record.generation, true))
+                    }
+                    RootPortState::Failed { .. } if record.retry_due(self.poll_ticks) => {
+                        Some((record.port, record.generation, true))
+                    }
+                    _ => None,
+                });
+            let Some((port, generation, connect)) = next else {
+                break;
+            };
+            if !connect {
+                self.remove_port(register, port, generation);
+                continue;
+            }
+            self.enumerate_port(register, port, generation);
+        }
+    }
+
+    fn enumerate_port(&mut self, register: regs::RegisterBlock, port: u8, generation: u64) {
+        let offset = self.port_offset(port);
+        let portsc = unsafe { register.read32(offset) };
+        if portsc & regs::PORTSC_CCS == 0 {
+            self.observe_port(register, port);
+            return;
+        }
+        let speed = ((portsc >> 10) & 0xf) as u8;
+        if speed >= 4 {
+            crate::println!(
+                "[INFO] xhci: port {} connected at SuperSpeed {}, skipping",
+                port,
+                speed
+            );
+            if let Some(record) = self
+                .root_ports
+                .iter_mut()
+                .find(|record| record.port == port)
+            {
+                record.mark_failed(self.poll_ticks);
+            }
+            return;
+        }
+        if let Some(record) = self
+            .root_ports
+            .iter_mut()
+            .find(|record| record.port == port)
+        {
+            if !record.generation_matches(generation) {
+                return;
+            }
+            record.mark_stage(RootPortState::Resetting);
+        }
+        crate::println!("[INFO] xhci: port {} connected, resetting", port);
+        if !self.reset_port(register, offset) {
+            crate::println!("[WARN] xhci: port {} reset failed", port);
+            if let Some(record) = self
+                .root_ports
+                .iter_mut()
+                .find(|record| record.port == port)
+            {
+                record.mark_failed(self.poll_ticks);
+            }
+            return;
+        }
+        let portsc = unsafe { register.read32(offset) };
+        if portsc & regs::PORTSC_CCS == 0 {
+            self.observe_port(register, port);
+            return;
+        }
+        let speed = ((portsc >> 10) & 0xf) as u8;
+        if let Some(record) = self
+            .root_ports
+            .iter_mut()
+            .find(|record| record.port == port)
+        {
+            if !record.generation_matches(generation) {
+                return;
+            }
+            record.mark_stage(RootPortState::Enumerating);
+        }
+        match self.address_port(register, port, speed, generation) {
+            Ok(device) => {
+                if self.port_is_current(port, generation) {
+                    crate::println!(
+                        "[INFO] xhci: port {} add slot {} generation {}",
+                        port,
+                        device.slot(),
+                        generation
+                    );
+                    self.ports.push(device);
+                    if let Some(record) = self
+                        .root_ports
+                        .iter_mut()
+                        .find(|record| record.port == port)
+                    {
+                        record.mark_active();
+                    }
+                } else {
+                    let slot = device.slot();
+                    if self.disable_slot(register, slot) {
+                        unsafe {
+                            core::ptr::write_volatile(
+                                (self.dcbaa.as_ptr() as *mut u64).add(slot as usize),
+                                0,
+                            )
+                        };
+                        fence(Ordering::SeqCst);
+                    } else {
+                        // Disable Slot did not establish that xHCI has stopped
+                        // DMA. Keep every buffer reachable for the remainder
+                        // of the isolated controller's lifetime.
+                        self.ports.push(device);
+                    }
+                }
+            }
+            Err(error) => {
+                crate::println!("[WARN] xhci: port {} enumeration failed: {:?}", port, error);
+                if let Some(record) = self
+                    .root_ports
+                    .iter_mut()
+                    .find(|record| record.port == port)
+                {
+                    record.mark_failed(self.poll_ticks);
+                }
+            }
+        }
+    }
+
+    fn port_is_current(&self, port: u8, generation: u64) -> bool {
+        let value = unsafe {
+            regs::RegisterBlock::new(self._mapping.as_ptr()).read32(self.port_offset(port))
+        };
+        value & regs::PORTSC_CCS != 0
+            && self
+                .root_ports
+                .iter()
+                .any(|record| record.port == port && record.generation_matches(generation))
+    }
+
+    fn disable_slot(&mut self, register: regs::RegisterBlock, slot: u8) -> bool {
+        match self.submit_command(
+            register,
+            Trb {
+                control: regs::TRB_TYPE_DISABLE_SLOT | (slot as u32) << 24,
+                ..Trb::default()
+            },
+        ) {
+            Ok(_) => true,
+            Err(error) => {
+                crate::println!(
+                    "[WARN] xhci: Disable Slot {} failed: {:?}; retaining DMA and isolating controller",
+                    slot,
+                    error
+                );
+                self.healthy = false;
+                false
+            }
+        }
+    }
+
+    fn remove_port(&mut self, register: regs::RegisterBlock, port: u8, generation: u64) {
+        let Some(index) = self.ports.iter().position(|device| device.port == port) else {
+            if let Some(record) = self
+                .root_ports
+                .iter_mut()
+                .find(|record| record.port == port && record.generation_matches(generation))
+            {
+                record.mark_stage(RootPortState::Disconnected);
+            }
+            return;
+        };
+        let slot = self.ports[index].slot();
+        if !self.disable_slot(register, slot) {
+            return;
+        }
+        unsafe {
+            core::ptr::write_volatile((self.dcbaa.as_ptr() as *mut u64).add(slot as usize), 0)
+        };
+        fence(Ordering::SeqCst);
+        self.ports.remove(index);
+        crate::println!(
+            "[INFO] xhci: port {} remove slot {} generation {} reclaimed",
+            port,
+            slot,
+            generation
+        );
+        if let Some(record) = self
+            .root_ports
+            .iter_mut()
+            .find(|record| record.port == port && record.generation_matches(generation))
+        {
+            record.mark_stage(RootPortState::Disconnected);
+        }
     }
 
     fn reset_port(&self, register: regs::RegisterBlock, offset: usize) -> bool {
@@ -869,6 +1154,7 @@ impl ControllerResources {
         register: regs::RegisterBlock,
         port: u8,
         speed: u8,
+        generation: u64,
     ) -> Result<RootDevice, InitError> {
         let slot = match self.submit_command(
             register,
@@ -893,162 +1179,267 @@ impl ControllerResources {
             slot
         );
         let context_size = if self.context_64 { 64 } else { 32 };
-        let input = DmaBuffer::new(context_size * 33, 64).map_err(|_| InitError::Allocation)?;
-        let output = DmaBuffer::new(context_size * 32, 64).map_err(|_| InitError::Allocation)?;
-        let ep0 = DmaBuffer::new(4096, 64).map_err(|_| InitError::Allocation)?;
-        let descriptor = DmaBuffer::new(18, 64).map_err(|_| InitError::Allocation)?;
-        let mut ep0_producer = 0;
-        unsafe {
-            core::ptr::write_volatile(
-                (self.dcbaa.as_ptr() as *mut u64).add(slot as usize),
-                output.physical_address(),
-            );
-            core::ptr::write_volatile(input.as_ptr().add(4) as *mut u32, 0b11);
-            core::ptr::write_volatile(
-                input.as_ptr().add(context_size) as *mut u32,
-                (speed as u32) << 20 | 1 << 27,
-            );
-            core::ptr::write_volatile(
-                input.as_ptr().add(context_size + 4) as *mut u32,
-                (port as u32) << 16,
-            );
-            core::ptr::write_volatile(
-                input.as_ptr().add(context_size * 2 + 4) as *mut u32,
-                // EP0 is a bidirectional control endpoint.  CErr must be 3
-                // for control transfers; a zero value is rejected by xHCI.
-                (usb2_max_packet(speed) as u32) << 16 | 4 << 3 | 3 << 1,
-            );
-            core::ptr::write_volatile(
-                input.as_ptr().add(context_size * 2 + 8) as *mut u64,
-                ep0.physical_address() | 1,
-            );
-            core::ptr::write_volatile(
-                (ep0.as_ptr() as *mut Trb).add(COMMAND_RING_ENTRIES - 1),
+        let input = match DmaBuffer::new(context_size * 33, 64) {
+            Ok(buffer) => buffer,
+            Err(_) => {
+                self.release_failed_slot(register, slot);
+                return Err(InitError::Allocation);
+            }
+        };
+        let output = match DmaBuffer::new(context_size * 32, 64) {
+            Ok(buffer) => buffer,
+            Err(_) => {
+                self.release_failed_slot(register, slot);
+                return Err(InitError::Allocation);
+            }
+        };
+        let ep0 = match DmaBuffer::new(4096, 64) {
+            Ok(buffer) => buffer,
+            Err(_) => {
+                self.release_failed_slot(register, slot);
+                return Err(InitError::Allocation);
+            }
+        };
+        let descriptor = match DmaBuffer::new(18, 64) {
+            Ok(buffer) => buffer,
+            Err(_) => {
+                self.release_failed_slot(register, slot);
+                return Err(InitError::Allocation);
+            }
+        };
+        (|| -> Result<RootDevice, InitError> {
+            macro_rules! fail_published {
+                ($error:expr) => {{
+                    self.release_or_retain_slot_resources(
+                        register,
+                        slot,
+                        [input, output, ep0, descriptor],
+                    );
+                    return Err($error);
+                }};
+            }
+            let mut ep0_producer = 0;
+            unsafe {
+                core::ptr::write_volatile(
+                    (self.dcbaa.as_ptr() as *mut u64).add(slot as usize),
+                    output.physical_address(),
+                );
+                core::ptr::write_volatile(input.as_ptr().add(4) as *mut u32, 0b11);
+                core::ptr::write_volatile(
+                    input.as_ptr().add(context_size) as *mut u32,
+                    (speed as u32) << 20 | 1 << 27,
+                );
+                core::ptr::write_volatile(
+                    input.as_ptr().add(context_size + 4) as *mut u32,
+                    (port as u32) << 16,
+                );
+                core::ptr::write_volatile(
+                    input.as_ptr().add(context_size * 2 + 4) as *mut u32,
+                    // EP0 is a bidirectional control endpoint.  CErr must be 3
+                    // for control transfers; a zero value is rejected by xHCI.
+                    (usb2_max_packet(speed) as u32) << 16 | 4 << 3 | 3 << 1,
+                );
+                core::ptr::write_volatile(
+                    input.as_ptr().add(context_size * 2 + 8) as *mut u64,
+                    ep0.physical_address() | 1,
+                );
+                core::ptr::write_volatile(
+                    (ep0.as_ptr() as *mut Trb).add(COMMAND_RING_ENTRIES - 1),
+                    Trb {
+                        parameter: ep0.physical_address(),
+                        control: TRB_TYPE_LINK | TRB_TC | TRB_CYCLE,
+                        ..Trb::default()
+                    },
+                );
+            }
+            // Publish DCBAA, input contexts, and the initial endpoint ring before
+            // the Address Device command lets the controller fetch them.
+            fence(Ordering::SeqCst);
+            if let Err(error) = self.submit_command(
+                register,
                 Trb {
-                    parameter: ep0.physical_address(),
-                    control: TRB_TYPE_LINK | TRB_TC | TRB_CYCLE,
+                    parameter: input.physical_address(),
+                    control: regs::TRB_TYPE_ADDRESS_DEVICE | (slot as u32) << 24,
                     ..Trb::default()
                 },
-            );
-        }
-        // Publish DCBAA, input contexts, and the initial endpoint ring before
-        // the Address Device command lets the controller fetch them.
-        fence(Ordering::SeqCst);
-        if let Err(error) = self.submit_command(
-            register,
-            Trb {
-                parameter: input.physical_address(),
-                control: regs::TRB_TYPE_ADDRESS_DEVICE | (slot as u32) << 24,
-                ..Trb::default()
-            },
-        ) {
-            crate::println!(
-                "[WARN] xhci: port {}, slot {} Address Device failed: {:?}",
-                port,
-                slot,
-                error
-            );
-            return Err(error);
-        }
-        crate::println!("[INFO] xhci: port {}, slot {} addressed", port, slot);
-        self.log_ep0_context(slot, &output);
-        crate::println!(
-            "[INFO] xhci: port {}, slot {} HID configuration scan pending (SET_CONFIGURATION/Configure Endpoint)",
-            port,
-            slot
-        );
-        if let Err(error) =
-            self.read_device_descriptor(register, slot, &ep0, &mut ep0_producer, &descriptor)
-        {
+            ) {
+                crate::println!(
+                    "[WARN] xhci: port {}, slot {} Address Device failed: {:?}",
+                    port,
+                    slot,
+                    error
+                );
+                fail_published!(error);
+            }
+            crate::println!("[INFO] xhci: port {}, slot {} addressed", port, slot);
             self.log_ep0_context(slot, &output);
             crate::println!(
-                "[WARN] xhci: port {}, slot {} Device Descriptor failed: {:?}",
+                "[INFO] xhci: port {}, slot {} HID configuration scan pending (SET_CONFIGURATION/Configure Endpoint)",
                 port,
-                slot,
-                error
+                slot
             );
-            return Err(error);
-        }
-        let config_header = DmaBuffer::new(9, 64).map_err(|_| InitError::Allocation)?;
-        self.control_transfer(
-            register,
-            slot,
-            &ep0,
-            &mut ep0_producer,
-            get_descriptor(2, 9),
-            Some(&config_header),
-        )?;
-        let header = unsafe { core::slice::from_raw_parts(config_header.as_ptr(), 9) };
-        let total = u16::from_le_bytes([header[2], header[3]]) as usize;
-        if total < 9 || total > 4096 {
-            return Err(InitError::Command(CompletionCode::TrbError));
-        }
-        let configuration = DmaBuffer::new(total, 64).map_err(|_| InitError::Allocation)?;
-        self.control_transfer(
-            register,
-            slot,
-            &ep0,
-            &mut ep0_producer,
-            get_descriptor(2, total as u16),
-            Some(&configuration),
-        )?;
-        let endpoint = parse_configuration(unsafe {
-            core::slice::from_raw_parts(configuration.as_ptr(), total)
-        })
-        .map_err(|_| InitError::Command(CompletionCode::TrbError))?;
-        log_hid_endpoint(slot, endpoint);
-        self.control_transfer(
-            register,
-            slot,
-            &ep0,
-            &mut ep0_producer,
-            set_configuration(endpoint.configuration_value),
-            None,
-        )?;
-        self.control_transfer(
-            register,
-            slot,
-            &ep0,
-            &mut ep0_producer,
-            set_idle(endpoint.interface_number),
-            None,
-        )?;
-        let interrupt_ring = DmaBuffer::new(4096, 64).map_err(|_| InitError::Allocation)?;
-        self.configure_endpoint(register, slot, &input, endpoint, &interrupt_ring)?;
-        crate::println!(
-            "[INFO] xhci: HID endpoint configured slot {}, endpoint {:#04x}, interval {}, max packet {}, DCS 1",
-            slot,
-            endpoint.endpoint_address,
-            endpoint.interval,
-            endpoint.max_packet_size
-        );
-        let report = DmaBuffer::new(endpoint.max_packet_size as usize, 64)
-            .map_err(|_| InitError::Allocation)?;
-        let mut device = RootDevice {
-            port,
-            state: PortState::Addressed {
+            if let Err(error) =
+                self.read_device_descriptor(register, slot, &ep0, &mut ep0_producer, &descriptor)
+            {
+                self.log_ep0_context(slot, &output);
+                crate::println!(
+                    "[WARN] xhci: port {}, slot {} Device Descriptor failed: {:?}",
+                    port,
+                    slot,
+                    error
+                );
+                fail_published!(error);
+            }
+            let config_header = match DmaBuffer::new(9, 64) {
+                Ok(buffer) => buffer,
+                Err(_) => fail_published!(InitError::Allocation),
+            };
+            if let Err(error) = self.control_transfer(
+                register,
                 slot,
-                speed,
-                max_packet: usb2_max_packet(speed),
-            },
-            _input_context: input,
-            _output_context: output,
-            _ep0_ring: ep0,
-            _device_descriptor: descriptor,
-            _configuration_descriptor: configuration,
-            interrupt_ring,
-            report,
-            hid_endpoint: endpoint,
-            interrupt_producer: 0,
-            interrupt_cycle: true,
-            input: if endpoint.protocol == 1 {
-                HidInput::Keyboard(KeyboardState::new())
-            } else {
-                HidInput::Mouse(MouseState::new())
-            },
-        };
-        Self::queue_interrupt_in(register, self.doorbell, &mut device);
-        Ok(device)
+                &ep0,
+                &mut ep0_producer,
+                get_descriptor(2, 9),
+                Some(&config_header),
+            ) {
+                fail_published!(error);
+            }
+            let header = unsafe { core::slice::from_raw_parts(config_header.as_ptr(), 9) };
+            let total = u16::from_le_bytes([header[2], header[3]]) as usize;
+            if total < 9 || total > 4096 {
+                fail_published!(InitError::Command(CompletionCode::TrbError));
+            }
+            let configuration = match DmaBuffer::new(total, 64) {
+                Ok(buffer) => buffer,
+                Err(_) => fail_published!(InitError::Allocation),
+            };
+            if let Err(error) = self.control_transfer(
+                register,
+                slot,
+                &ep0,
+                &mut ep0_producer,
+                get_descriptor(2, total as u16),
+                Some(&configuration),
+            ) {
+                fail_published!(error);
+            }
+            let endpoint = match parse_configuration(unsafe {
+                core::slice::from_raw_parts(configuration.as_ptr(), total)
+            }) {
+                Ok(endpoint) => endpoint,
+                Err(_) => fail_published!(InitError::Command(CompletionCode::TrbError)),
+            };
+            log_hid_endpoint(slot, endpoint);
+            if let Err(error) = self.control_transfer(
+                register,
+                slot,
+                &ep0,
+                &mut ep0_producer,
+                set_configuration(endpoint.configuration_value),
+                None,
+            ) {
+                fail_published!(error);
+            }
+            if let Err(error) = self.control_transfer(
+                register,
+                slot,
+                &ep0,
+                &mut ep0_producer,
+                set_idle(endpoint.interface_number),
+                None,
+            ) {
+                fail_published!(error);
+            }
+            let interrupt_ring = match DmaBuffer::new(4096, 64) {
+                Ok(buffer) => buffer,
+                Err(_) => fail_published!(InitError::Allocation),
+            };
+            if let Err(error) =
+                self.configure_endpoint(register, slot, &input, endpoint, &interrupt_ring)
+            {
+                self.release_or_retain_slot_resources(
+                    register,
+                    slot,
+                    [input, output, ep0, descriptor, interrupt_ring],
+                );
+                return Err(error);
+            }
+            crate::println!(
+                "[INFO] xhci: HID endpoint configured slot {}, endpoint {:#04x}, interval {}, max packet {}, DCS 1",
+                slot,
+                endpoint.endpoint_address,
+                endpoint.interval,
+                endpoint.max_packet_size
+            );
+            let report = match DmaBuffer::new(endpoint.max_packet_size as usize, 64) {
+                Ok(buffer) => buffer,
+                Err(_) => {
+                    self.release_or_retain_slot_resources(
+                        register,
+                        slot,
+                        [input, output, ep0, descriptor, interrupt_ring],
+                    );
+                    return Err(InitError::Allocation);
+                }
+            };
+            let mut device = RootDevice {
+                port,
+                generation,
+                state: PortState::Addressed {
+                    slot,
+                    speed,
+                    max_packet: usb2_max_packet(speed),
+                },
+                _input_context: input,
+                _output_context: output,
+                _ep0_ring: ep0,
+                _device_descriptor: descriptor,
+                _configuration_descriptor: configuration,
+                interrupt_ring,
+                report,
+                hid_endpoint: endpoint,
+                interrupt_producer: 0,
+                interrupt_cycle: true,
+                input: if endpoint.protocol == 1 {
+                    HidInput::Keyboard(KeyboardState::new())
+                } else {
+                    HidInput::Mouse(MouseState::new())
+                },
+            };
+            Self::queue_interrupt_in(register, self.doorbell, &mut device);
+            Ok(device)
+        })()
+    }
+
+    fn release_or_retain_slot_resources<const N: usize>(
+        &mut self,
+        register: regs::RegisterBlock,
+        slot: u8,
+        resources: [DmaBuffer; N],
+    ) {
+        if self.disable_slot(register, slot) {
+            unsafe {
+                core::ptr::write_volatile((self.dcbaa.as_ptr() as *mut u64).add(slot as usize), 0)
+            };
+            fence(Ordering::SeqCst);
+        } else {
+            for resource in resources {
+                core::mem::forget(resource);
+            }
+        }
+    }
+
+    fn release_failed_slot(&mut self, register: regs::RegisterBlock, slot: u8) {
+        if self.disable_slot(register, slot) {
+            unsafe {
+                core::ptr::write_volatile((self.dcbaa.as_ptr() as *mut u64).add(slot as usize), 0)
+            };
+            fence(Ordering::SeqCst);
+            crate::println!(
+                "[INFO] xhci: slot {} released after failed enumeration",
+                slot
+            );
+        }
     }
 
     fn log_ep0_context(&self, slot: u8, output: &DmaBuffer) {

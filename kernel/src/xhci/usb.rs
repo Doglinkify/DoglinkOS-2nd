@@ -27,6 +27,7 @@ pub struct PortRecord {
     pub portsc: u32,
     pub generation: u64,
     pub state: RootPortState,
+    failures: u8,
 }
 
 impl PortRecord {
@@ -41,6 +42,7 @@ impl PortRecord {
             portsc,
             generation: 0,
             state: RootPortState::Disconnected,
+            failures: 0,
         }
     }
 
@@ -54,13 +56,17 @@ impl PortRecord {
         let was_connected = self.portsc & crate::xhci::regs::PORTSC_CCS != 0;
         let changes = self.acknowledge_changes(portsc);
         let connected = portsc & crate::xhci::regs::PORTSC_CCS != 0;
-        if changes != 0 || connected != was_connected {
+        // Reset, link and enable changes are expected while enumerating. Only
+        // a connection change (or a contradicting CCS sample) starts a new
+        // device generation and lifecycle transition.
+        if changes & crate::xhci::regs::PORTSC_CSC != 0 || connected != was_connected {
             self.generation = self.generation.wrapping_add(1);
             self.state = if connected {
                 RootPortState::Debouncing {
                     until: now.saturating_add(Self::DEBOUNCE_TICKS),
                 }
             } else {
+                self.failures = 0;
                 RootPortState::Removing
             };
         }
@@ -69,6 +75,7 @@ impl PortRecord {
     }
 
     pub fn mark_active(&mut self) {
+        self.failures = 0;
         self.state = RootPortState::Active;
     }
     pub fn mark_stage(&mut self, state: RootPortState) {
@@ -79,10 +86,8 @@ impl PortRecord {
     }
 
     pub fn mark_failed(&mut self, now: u64) {
-        let failures = match self.state {
-            RootPortState::Failed { failures, .. } => failures.saturating_add(1),
-            _ => 1,
-        };
+        self.failures = self.failures.saturating_add(1);
+        let failures = self.failures;
         let shift = failures.saturating_sub(1).min(6) as u32;
         let delay = (Self::RETRY_BASE_TICKS << shift).min(Self::RETRY_MAX_TICKS);
         self.state = RootPortState::Failed {

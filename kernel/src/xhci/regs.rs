@@ -77,6 +77,7 @@ pub const IMAN_IP: u32 = 1;
 pub const IMAN_IE: u32 = 1 << 1;
 pub const TRB_TYPE_NOOP_COMMAND: u32 = 23 << 10;
 pub const TRB_TYPE_ENABLE_SLOT: u32 = 9 << 10;
+pub const TRB_TYPE_DISABLE_SLOT: u32 = 10 << 10;
 pub const TRB_TYPE_ADDRESS_DEVICE: u32 = 11 << 10;
 pub const TRB_TYPE_CONFIGURE_ENDPOINT: u32 = 12 << 10;
 

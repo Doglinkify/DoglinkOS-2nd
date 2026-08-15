@@ -7,6 +7,7 @@
 pub mod bulk;
 mod controller;
 pub mod hid;
+pub mod msc;
 pub mod regs;
 pub mod ring;
 pub mod trb;
@@ -21,6 +22,7 @@ pub fn test() {
     ring::test();
     usb::test();
     hid::test();
+    msc::test();
     controller::test();
     crate::println!("[INFO] xhci: core self-tests passed");
 }

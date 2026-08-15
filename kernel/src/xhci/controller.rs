@@ -2,15 +2,16 @@
 
 use super::bulk::{self, BulkCompletion};
 use super::hid::{KeyboardState, MouseState};
+use super::msc;
 use super::regs;
 use super::trb::{
     CompletionCode, TRB_CHAIN, TRB_CYCLE, TRB_TC, TRB_TYPE_COMMAND_COMPLETION, TRB_TYPE_LINK,
     TRB_TYPE_MASK, TRB_TYPE_NORMAL, Trb, port_status_change_event,
 };
 use super::usb::{
-    EndpointDescriptor, HidBootEndpoint, PortRecord, PortState, RootPortState, SetupRequest,
-    SupportedProtocol, get_descriptor, parse_configuration, set_configuration, set_idle,
-    supported_protocol, usb2_max_packet,
+    EndpointDescriptor, HidBootEndpoint, MscBotInterface, PortRecord, PortState, RootPortState,
+    SetupRequest, SupportedProtocol, get_descriptor, parse_configuration, parse_msc_bot_interface,
+    set_configuration, set_idle, supported_protocol, usb2_max_packet,
 };
 use crate::mm::dma::{DmaBuffer, MmioMapping};
 use crate::pcie::enumrate::{Bdf, MemoryBar, PCIConfigSpace, decode_memory_bar, doit};
@@ -73,12 +74,27 @@ struct RootDevice {
     _ep0_ring: DmaBuffer,
     _device_descriptor: DmaBuffer,
     _configuration_descriptor: DmaBuffer,
+    kind: DeviceKind,
+}
+
+#[allow(dead_code)] // MSC rings stay owned while the configured device is active.
+enum DeviceKind {
+    Hid(HidResources),
+    Msc(MscResources),
+}
+
+struct HidResources {
     interrupt_ring: DmaBuffer,
     report: DmaBuffer,
-    hid_endpoint: HidBootEndpoint,
-    interrupt_producer: usize,
-    interrupt_cycle: bool,
+    endpoint: HidBootEndpoint,
+    producer: usize,
+    cycle: bool,
     input: HidInput,
+}
+
+struct MscResources {
+    _bulk_in_ring: DmaBuffer,
+    _bulk_out_ring: DmaBuffer,
 }
 
 enum HidInput {
@@ -474,29 +490,34 @@ impl ControllerResources {
         }
     }
 
-    fn queue_interrupt_in(register: regs::RegisterBlock, doorbell: usize, device: &mut RootDevice) {
-        let index = device.interrupt_producer;
+    fn queue_interrupt_in(
+        register: regs::RegisterBlock,
+        doorbell: usize,
+        slot: u8,
+        hid: &mut HidResources,
+    ) {
+        let index = hid.producer;
         let trb = Trb {
-            parameter: device.report.physical_address(),
-            status: device.hid_endpoint.max_packet_size as u32,
-            control: TRB_TYPE_NORMAL | (1 << 5) | device.interrupt_cycle as u32,
+            parameter: hid.report.physical_address(),
+            status: hid.endpoint.max_packet_size as u32,
+            control: TRB_TYPE_NORMAL | (1 << 5) | hid.cycle as u32,
         };
         unsafe {
-            core::ptr::write_volatile((device.interrupt_ring.as_ptr() as *mut Trb).add(index), trb);
+            core::ptr::write_volatile((hid.interrupt_ring.as_ptr() as *mut Trb).add(index), trb);
         }
         fence(Ordering::SeqCst);
-        let endpoint_id = endpoint_id(device.hid_endpoint.endpoint_address);
-        unsafe { register.write32(doorbell + device.slot() as usize * 4, endpoint_id as u32) };
-        device.interrupt_producer += 1;
-        if device.interrupt_producer == TRANSFER_RING_ENTRIES {
-            device.interrupt_producer = 0;
-            device.interrupt_cycle = !device.interrupt_cycle;
+        let endpoint_id = endpoint_id(hid.endpoint.endpoint_address);
+        unsafe { register.write32(doorbell + slot as usize * 4, endpoint_id as u32) };
+        hid.producer += 1;
+        if hid.producer == TRANSFER_RING_ENTRIES {
+            hid.producer = 0;
+            hid.cycle = !hid.cycle;
             unsafe {
                 core::ptr::write_volatile(
-                    (device.interrupt_ring.as_ptr() as *mut Trb).add(TRANSFER_RING_ENTRIES),
+                    (hid.interrupt_ring.as_ptr() as *mut Trb).add(TRANSFER_RING_ENTRIES),
                     Trb {
-                        parameter: device.interrupt_ring.physical_address(),
-                        control: TRB_TYPE_LINK | TRB_TC | device.interrupt_cycle as u32,
+                        parameter: hid.interrupt_ring.physical_address(),
+                        control: TRB_TYPE_LINK | TRB_TC | hid.cycle as u32,
                         ..Trb::default()
                     },
                 );
@@ -552,9 +573,12 @@ impl ControllerResources {
                 });
             let Some(device) = self.ports.iter_mut().find(|device| {
                 device.slot() == slot
-                    && endpoint_id(device.hid_endpoint.endpoint_address) == endpoint
                     && generation == Some(device.generation)
+                    && matches!(&device.kind, DeviceKind::Hid(hid) if endpoint_id(hid.endpoint.endpoint_address) == endpoint)
             }) else {
+                continue;
+            };
+            let DeviceKind::Hid(hid) = &mut device.kind else {
                 continue;
             };
             let completion = CompletionCode::from_status(event.status);
@@ -568,21 +592,21 @@ impl ControllerResources {
                     endpoint,
                     completion
                 );
-                Self::queue_interrupt_in(register, self.doorbell, device);
+                Self::queue_interrupt_in(register, self.doorbell, slot, hid);
                 continue;
             }
             let residual = (event.status & 0x00ff_ffff) as usize;
-            let max_packet = device.hid_endpoint.max_packet_size as usize;
+            let max_packet = hid.endpoint.max_packet_size as usize;
             if residual <= max_packet {
                 let report_len = max_packet - residual;
                 let report =
-                    unsafe { core::slice::from_raw_parts(device.report.as_ptr(), report_len) };
-                match &mut device.input {
+                    unsafe { core::slice::from_raw_parts(hid.report.as_ptr(), report_len) };
+                match &mut hid.input {
                     HidInput::Keyboard(state) => state.submit_report(report),
                     HidInput::Mouse(state) => state.submit_report(report),
                 }
             }
-            Self::queue_interrupt_in(register, self.doorbell, device);
+            Self::queue_interrupt_in(register, self.doorbell, slot, hid);
         }
         self.service_root_ports(register);
     }
@@ -1324,11 +1348,42 @@ impl ControllerResources {
             ) {
                 fail_published!(error);
             }
-            let endpoint = match parse_configuration(unsafe {
-                core::slice::from_raw_parts(configuration.as_ptr(), total)
-            }) {
+            let config_bytes =
+                unsafe { core::slice::from_raw_parts(configuration.as_ptr(), total) };
+            let endpoint = match parse_configuration(config_bytes) {
                 Ok(endpoint) => endpoint,
-                Err(_) => fail_published!(InitError::Command(CompletionCode::TrbError)),
+                Err(_) => {
+                    let msc_endpoint = match parse_msc_bot_interface(config_bytes) {
+                        Ok(endpoint) => endpoint,
+                        Err(_) => fail_published!(InitError::Command(CompletionCode::TrbError)),
+                    };
+                    let msc = match self.configure_and_probe_msc(
+                        register,
+                        slot,
+                        &ep0,
+                        &mut ep0_producer,
+                        &input,
+                        msc_endpoint,
+                    ) {
+                        Ok(msc) => msc,
+                        Err(error) => fail_published!(error),
+                    };
+                    return Ok(RootDevice {
+                        port,
+                        generation,
+                        state: PortState::Addressed {
+                            slot,
+                            speed,
+                            max_packet: usb2_max_packet(speed),
+                        },
+                        _input_context: input,
+                        _output_context: output,
+                        _ep0_ring: ep0,
+                        _device_descriptor: descriptor,
+                        _configuration_descriptor: configuration,
+                        kind: DeviceKind::Msc(msc),
+                    });
+                }
             };
             log_hid_endpoint(slot, endpoint);
             if let Err(error) = self.control_transfer(
@@ -1396,18 +1451,22 @@ impl ControllerResources {
                 _ep0_ring: ep0,
                 _device_descriptor: descriptor,
                 _configuration_descriptor: configuration,
-                interrupt_ring,
-                report,
-                hid_endpoint: endpoint,
-                interrupt_producer: 0,
-                interrupt_cycle: true,
-                input: if endpoint.protocol == 1 {
-                    HidInput::Keyboard(KeyboardState::new())
-                } else {
-                    HidInput::Mouse(MouseState::new())
-                },
+                kind: DeviceKind::Hid(HidResources {
+                    interrupt_ring,
+                    report,
+                    endpoint,
+                    producer: 0,
+                    cycle: true,
+                    input: if endpoint.protocol == 1 {
+                        HidInput::Keyboard(KeyboardState::new())
+                    } else {
+                        HidInput::Mouse(MouseState::new())
+                    },
+                }),
             };
-            Self::queue_interrupt_in(register, self.doorbell, &mut device);
+            if let DeviceKind::Hid(hid) = &mut device.kind {
+                Self::queue_interrupt_in(register, self.doorbell, slot, hid);
+            }
             Ok(device)
         })()
     }
@@ -1761,6 +1820,180 @@ impl ControllerResources {
             },
         )
         .map(|_| ())
+    }
+
+    fn configure_and_probe_msc(
+        &mut self,
+        register: regs::RegisterBlock,
+        slot: u8,
+        ep0: &DmaBuffer,
+        ep0_producer: &mut usize,
+        input: &DmaBuffer,
+        endpoint: MscBotInterface,
+    ) -> Result<MscResources, InitError> {
+        self.control_transfer(
+            register,
+            slot,
+            ep0,
+            ep0_producer,
+            set_configuration(endpoint.configuration_value),
+            None,
+        )?;
+        let bulk_in_ring = DmaBuffer::new(4096, 64).map_err(|_| InitError::Allocation)?;
+        let bulk_out_ring = DmaBuffer::new(4096, 64).map_err(|_| InitError::Allocation)?;
+        self.configure_bulk_endpoint(register, slot, input, endpoint.bulk_out, &bulk_out_ring)?;
+        self.configure_bulk_endpoint(register, slot, input, endpoint.bulk_in, &bulk_in_ring)?;
+        let max_lun = DmaBuffer::new(1, 64).map_err(|_| InitError::Allocation)?;
+        match self.control_transfer(
+            register,
+            slot,
+            ep0,
+            ep0_producer,
+            msc::get_max_lun(endpoint.interface_number),
+            Some(&max_lun),
+        ) {
+            Ok(()) => {
+                if unsafe { core::ptr::read_volatile(max_lun.as_ptr()) } != 0 {
+                    return Err(InitError::Command(CompletionCode::TrbError));
+                }
+            }
+            Err(InitError::Command(CompletionCode::StallError)) => {}
+            Err(error) => return Err(error),
+        }
+        let cbw = DmaBuffer::new(msc::CBW_LEN, 64).map_err(|_| InitError::Allocation)?;
+        let csw = DmaBuffer::new(msc::CSW_LEN, 64).map_err(|_| InitError::Allocation)?;
+        let data = DmaBuffer::new(64, 64).map_err(|_| InitError::Allocation)?;
+        let mut in_producer = 0;
+        let mut out_producer = 0;
+        let mut in_cycle = true;
+        let mut out_cycle = true;
+        self.msc_command(
+            register,
+            slot,
+            endpoint,
+            &bulk_in_ring,
+            &bulk_out_ring,
+            &mut in_producer,
+            &mut out_producer,
+            &mut in_cycle,
+            &mut out_cycle,
+            &cbw,
+            &csw,
+            &data,
+            36,
+            &msc::inquiry(),
+        )?;
+        let inquiry = unsafe { core::slice::from_raw_parts(data.as_ptr(), 36) };
+        crate::println!(
+            "[INFO] xhci: MSC BOT slot {}, LUN 0, vendor {:?}, product {:?}",
+            slot,
+            &inquiry[8..16],
+            &inquiry[16..32]
+        );
+        self.msc_command(
+            register,
+            slot,
+            endpoint,
+            &bulk_in_ring,
+            &bulk_out_ring,
+            &mut in_producer,
+            &mut out_producer,
+            &mut in_cycle,
+            &mut out_cycle,
+            &cbw,
+            &csw,
+            &data,
+            0,
+            &msc::test_unit_ready(),
+        )?;
+        self.msc_command(
+            register,
+            slot,
+            endpoint,
+            &bulk_in_ring,
+            &bulk_out_ring,
+            &mut in_producer,
+            &mut out_producer,
+            &mut in_cycle,
+            &mut out_cycle,
+            &cbw,
+            &csw,
+            &data,
+            8,
+            &msc::read_capacity10(),
+        )?;
+        let capacity =
+            msc::parse_capacity10(unsafe { core::slice::from_raw_parts(data.as_ptr(), 8) })
+                .map_err(|_| InitError::Command(CompletionCode::TrbError))?;
+        crate::println!(
+            "[INFO] xhci: MSC BOT slot {}, LUN 0, capacity {} blocks, block size {}",
+            slot,
+            capacity.blocks,
+            capacity.block_size
+        );
+        Ok(MscResources {
+            _bulk_in_ring: bulk_in_ring,
+            _bulk_out_ring: bulk_out_ring,
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn msc_command(
+        &mut self,
+        register: regs::RegisterBlock,
+        slot: u8,
+        endpoint: MscBotInterface,
+        bulk_in_ring: &DmaBuffer,
+        bulk_out_ring: &DmaBuffer,
+        in_producer: &mut usize,
+        out_producer: &mut usize,
+        in_cycle: &mut bool,
+        out_cycle: &mut bool,
+        cbw: &DmaBuffer,
+        csw: &DmaBuffer,
+        data: &DmaBuffer,
+        data_len: usize,
+        cdb: &[u8],
+    ) -> Result<(), InitError> {
+        let tag = (*out_producer as u32).wrapping_add(1);
+        let packet = msc::cbw(tag, data_len as u32, msc::DataDirection::In, 0, cdb);
+        unsafe { core::ptr::copy_nonoverlapping(packet.as_ptr(), cbw.as_ptr(), packet.len()) };
+        self.bulk_transfer(
+            register,
+            slot,
+            endpoint.bulk_out.address,
+            bulk_out_ring,
+            out_producer,
+            out_cycle,
+            cbw,
+            packet.len(),
+        )?;
+        if data_len != 0 {
+            self.bulk_transfer(
+                register,
+                slot,
+                endpoint.bulk_in.address,
+                bulk_in_ring,
+                in_producer,
+                in_cycle,
+                data,
+                data_len,
+            )?;
+        }
+        self.bulk_transfer(
+            register,
+            slot,
+            endpoint.bulk_in.address,
+            bulk_in_ring,
+            in_producer,
+            in_cycle,
+            csw,
+            msc::CSW_LEN,
+        )?;
+        let status = unsafe { core::slice::from_raw_parts(csw.as_ptr(), msc::CSW_LEN) };
+        msc::Csw::parse(status)
+            .and_then(|status| status.validate(tag, data_len))
+            .map_err(|_| InitError::Command(CompletionCode::TrbError))
     }
 
     fn read_device_descriptor(

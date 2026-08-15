@@ -4,6 +4,7 @@
 //! effects yet.  The following commits build the hardware-facing lifecycle
 //! on top of these checked layouts and ring primitives.
 
+pub mod bulk;
 mod controller;
 pub mod hid;
 pub mod regs;
@@ -15,6 +16,7 @@ pub use controller::{ControllerState, init, interrupt_handler, poll};
 
 /// Run the xHCI pure-logic self tests.
 pub fn test() {
+    bulk::test();
     trb::test();
     ring::test();
     usb::test();

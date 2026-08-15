@@ -1,5 +1,6 @@
 //! PCI discovery and the bounded xHCI controller reset sequence.
 
+use super::bulk::{self, BulkCompletion};
 use super::hid::{KeyboardState, MouseState};
 use super::regs;
 use super::trb::{
@@ -7,9 +8,9 @@ use super::trb::{
     TRB_TYPE_MASK, TRB_TYPE_NORMAL, Trb, port_status_change_event,
 };
 use super::usb::{
-    HidBootEndpoint, PortRecord, PortState, RootPortState, SetupRequest, SupportedProtocol,
-    get_descriptor, parse_configuration, set_configuration, set_idle, supported_protocol,
-    usb2_max_packet,
+    EndpointDescriptor, HidBootEndpoint, PortRecord, PortState, RootPortState, SetupRequest,
+    SupportedProtocol, get_descriptor, parse_configuration, set_configuration, set_idle,
+    supported_protocol, usb2_max_packet,
 };
 use crate::mm::dma::{DmaBuffer, MmioMapping};
 use crate::pcie::enumrate::{Bdf, MemoryBar, PCIConfigSpace, decode_memory_bar, doit};
@@ -1551,6 +1552,94 @@ impl ControllerResources {
         completion
     }
 
+    /// Submit exactly one bulk Normal TRB and wait for its matching event.
+    /// The caller owns a distinct endpoint ring and DMA buffer, so no HID TD
+    /// can be overwritten or mistaken for this completion.
+    #[allow(dead_code)]
+    fn bulk_transfer(
+        &mut self,
+        register: regs::RegisterBlock,
+        slot: u8,
+        endpoint_address: u8,
+        ring: &DmaBuffer,
+        producer: &mut usize,
+        cycle: &mut bool,
+        buffer: &DmaBuffer,
+        len: usize,
+    ) -> Result<BulkCompletion, InitError> {
+        if *producer >= TRANSFER_RING_ENTRIES || len > buffer.len() {
+            return Err(InitError::Command(CompletionCode::RingOverrun));
+        }
+        let in_direction = endpoint_address & 0x80 != 0;
+        let trb = bulk::normal_trb(buffer.physical_address(), len, in_direction, *cycle)
+            .map_err(|_| InitError::Command(CompletionCode::TrbError))?;
+        let trb_address = ring.physical_address() + (*producer * 16) as u64;
+        unsafe { core::ptr::write_volatile((ring.as_ptr() as *mut Trb).add(*producer), trb) };
+        fence(Ordering::SeqCst);
+        unsafe {
+            register.write32(
+                self.doorbell + slot as usize * 4,
+                endpoint_id(endpoint_address) as u32,
+            )
+        };
+        let (code, residual) = self.poll_bulk_completion(register, trb_address)?;
+        *producer += 1;
+        if *producer == TRANSFER_RING_ENTRIES {
+            *producer = 0;
+            *cycle = !*cycle;
+            unsafe {
+                core::ptr::write_volatile(
+                    (ring.as_ptr() as *mut Trb).add(TRANSFER_RING_ENTRIES),
+                    Trb {
+                        parameter: ring.physical_address(),
+                        control: TRB_TYPE_LINK | TRB_TC | *cycle as u32,
+                        ..Trb::default()
+                    },
+                );
+            }
+        }
+        bulk::completion(code, len, residual, in_direction).map_err(|error| match error {
+            bulk::BulkError::Completion(code) => InitError::Command(code),
+            _ => InitError::Command(CompletionCode::TrbError),
+        })
+    }
+
+    #[allow(dead_code)]
+    fn poll_bulk_completion(
+        &mut self,
+        register: regs::RegisterBlock,
+        trb_address: u64,
+    ) -> Result<(CompletionCode, usize), InitError> {
+        for poll in 0..TRANSFER_POLL_LIMIT {
+            if poll % TRANSFER_YIELD_INTERVAL == 0 {
+                unsafe { register.read32(self.op + regs::USBSTS) };
+            }
+            let event = unsafe {
+                core::ptr::read_volatile(
+                    self.event_ring.as_ptr().add(self.event_consumer * 16) as *const Trb
+                )
+            };
+            if (event.control & TRB_CYCLE != 0) != self.event_cycle {
+                core::hint::spin_loop();
+                continue;
+            }
+            self.acknowledge_event(register);
+            if let Some(change) = port_status_change_event(event) {
+                self.handle_port_status_change(register, change.port_id);
+                continue;
+            }
+            if event.control & TRB_TYPE_MASK == super::trb::TRB_TYPE_TRANSFER_EVENT
+                && event.parameter == trb_address
+            {
+                return Ok((
+                    CompletionCode::from_status(event.status),
+                    (event.status & 0x00ff_ffff) as usize,
+                ));
+            }
+        }
+        Err(InitError::Timeout("bulk transfer"))
+    }
+
     fn configure_endpoint(
         &mut self,
         register: regs::RegisterBlock,
@@ -1601,6 +1690,65 @@ impl ControllerResources {
                 core::ptr::read_volatile(control),
                 core::ptr::read_volatile(slot_context) >> 27,
                 ring.physical_address() | 1,
+            );
+        }
+        fence(Ordering::SeqCst);
+        self.submit_command(
+            register,
+            Trb {
+                parameter: input.physical_address(),
+                control: regs::TRB_TYPE_CONFIGURE_ENDPOINT | (slot as u32) << 24,
+                ..Trb::default()
+            },
+        )
+        .map(|_| ())
+    }
+
+    /// Configure one Bulk IN or OUT endpoint with an independently-owned
+    /// transfer ring.  BOT configures its pair with separate calls/rings.
+    #[allow(dead_code)]
+    fn configure_bulk_endpoint(
+        &mut self,
+        register: regs::RegisterBlock,
+        slot: u8,
+        input: &DmaBuffer,
+        endpoint: EndpointDescriptor,
+        ring: &DmaBuffer,
+    ) -> Result<(), InitError> {
+        let context_size = if self.context_64 { 64 } else { 32 };
+        let endpoint_id = endpoint_id(endpoint.address) as usize;
+        if endpoint_id == 0
+            || endpoint_id >= 32
+            || endpoint.attributes != 0x02
+            || endpoint.max_packet_size == 0
+        {
+            return Err(InitError::Command(CompletionCode::TrbError));
+        }
+        unsafe {
+            let control = input.as_ptr().add(4) as *mut u32;
+            core::ptr::write_volatile(control, 1 | 1 << endpoint_id);
+            let slot_context = input.as_ptr().add(context_size) as *mut u32;
+            let old = core::ptr::read_volatile(slot_context);
+            core::ptr::write_volatile(
+                slot_context,
+                (old & !(0x1f << 27)) | (endpoint_id as u32) << 27,
+            );
+            let context = input.as_ptr().add(context_size * (endpoint_id + 1)) as *mut u32;
+            // Bulk endpoint type: OUT=2, IN=6. CErr=3.
+            let endpoint_type = if endpoint.address & 0x80 != 0 { 6 } else { 2 };
+            core::ptr::write_volatile(context, 0);
+            core::ptr::write_volatile(
+                context.add(1),
+                (endpoint.max_packet_size as u32) << 16 | endpoint_type << 3 | 3 << 1,
+            );
+            core::ptr::write_volatile(context.add(2) as *mut u64, ring.physical_address() | 1);
+            core::ptr::write_volatile(
+                (ring.as_ptr() as *mut Trb).add(TRANSFER_RING_ENTRIES),
+                Trb {
+                    parameter: ring.physical_address(),
+                    control: TRB_TYPE_LINK | TRB_TC | TRB_CYCLE,
+                    ..Trb::default()
+                },
             );
         }
         fence(Ordering::SeqCst);

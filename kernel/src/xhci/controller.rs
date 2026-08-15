@@ -93,8 +93,18 @@ struct HidResources {
 }
 
 struct MscResources {
-    _bulk_in_ring: DmaBuffer,
-    _bulk_out_ring: DmaBuffer,
+    bulk_in_ring: DmaBuffer,
+    bulk_out_ring: DmaBuffer,
+    endpoint: MscBotInterface,
+    capacity: msc::Capacity,
+    usb_id: Option<usize>,
+    cbw: DmaBuffer,
+    csw: DmaBuffer,
+    data: DmaBuffer,
+    in_producer: usize,
+    out_producer: usize,
+    in_cycle: bool,
+    out_cycle: bool,
 }
 
 enum HidInput {
@@ -842,7 +852,7 @@ impl ControllerResources {
                     .map(|record| record.generation)
                     .unwrap_or(0);
                 match self.address_port(register, port, speed, generation) {
-                    Ok(device) => {
+                    Ok(mut device) => {
                         let desc = unsafe {
                             core::slice::from_raw_parts(device._device_descriptor.as_ptr(), 18)
                         };
@@ -860,6 +870,9 @@ impl ControllerResources {
                             vendor,
                             product,
                         );
+                        if let DeviceKind::Msc(msc) = &mut device.kind {
+                            msc.usb_id = Some(crate::blockdev::usb::register(msc.capacity.blocks));
+                        }
                         self.ports.push(device);
                         if let Some(record) = self
                             .root_ports
@@ -1043,7 +1056,7 @@ impl ControllerResources {
             record.mark_stage(RootPortState::Enumerating);
         }
         match self.address_port(register, port, speed, generation) {
-            Ok(device) => {
+            Ok(mut device) => {
                 if self.port_is_current(port, generation) {
                     crate::println!(
                         "[INFO] xhci: port {} add slot {} generation {}",
@@ -1051,6 +1064,9 @@ impl ControllerResources {
                         device.slot(),
                         generation
                     );
+                    if let DeviceKind::Msc(msc) = &mut device.kind {
+                        msc.usb_id = Some(crate::blockdev::usb::register(msc.capacity.blocks));
+                    }
                     self.ports.push(device);
                     if let Some(record) = self
                         .root_ports
@@ -1133,6 +1149,13 @@ impl ControllerResources {
             }
             return;
         };
+        if let DeviceKind::Msc(msc) = &self.ports[index].kind
+            && let Some(id) = msc.usb_id
+        {
+            // Invalidate existing handles before Disable Slot, so a later VFS
+            // read can never submit a transfer using resources being reclaimed.
+            crate::blockdev::usb::offline(id);
+        }
         let slot = self.ports[index].slot();
         if !self.disable_slot(register, slot) {
             return;
@@ -1862,7 +1885,7 @@ impl ControllerResources {
         }
         let cbw = DmaBuffer::new(msc::CBW_LEN, 64).map_err(|_| InitError::Allocation)?;
         let csw = DmaBuffer::new(msc::CSW_LEN, 64).map_err(|_| InitError::Allocation)?;
-        let data = DmaBuffer::new(64, 64).map_err(|_| InitError::Allocation)?;
+        let data = DmaBuffer::new(msc::MAX_READ_BYTES, 64).map_err(|_| InitError::Allocation)?;
         let mut in_producer = 0;
         let mut out_producer = 0;
         let mut in_cycle = true;
@@ -1932,8 +1955,18 @@ impl ControllerResources {
             capacity.block_size
         );
         Ok(MscResources {
-            _bulk_in_ring: bulk_in_ring,
-            _bulk_out_ring: bulk_out_ring,
+            bulk_in_ring,
+            bulk_out_ring,
+            endpoint,
+            capacity,
+            usb_id: None,
+            cbw,
+            csw,
+            data,
+            in_producer,
+            out_producer,
+            in_cycle,
+            out_cycle,
         })
     }
 
@@ -1994,6 +2027,73 @@ impl ControllerResources {
         msc::Csw::parse(status)
             .and_then(|status| status.validate(tag, data_len))
             .map_err(|_| InitError::Command(CompletionCode::TrbError))
+    }
+
+    fn read_usb_blocks(&mut self, id: usize, lba: u64, output: &mut [u8]) -> bool {
+        if output.is_empty()
+            || output.len() % msc::BLOCK_SIZE != 0
+            || output.len() > msc::MAX_READ_BYTES
+            || lba > u32::MAX as u64
+        {
+            return false;
+        }
+        let Some(device) = self
+            .ports
+            .iter_mut()
+            .find(|device| matches!(&device.kind, DeviceKind::Msc(msc) if msc.usb_id == Some(id)))
+        else {
+            return false;
+        };
+        let slot = device.slot();
+        let DeviceKind::Msc(msc) = &mut device.kind else {
+            return false;
+        };
+        let blocks = (output.len() / msc::BLOCK_SIZE) as u64;
+        if lba
+            .checked_add(blocks)
+            .is_none_or(|end| end > msc.capacity.blocks)
+        {
+            return false;
+        }
+
+        // xHCI polling is the sole caller of this controller. Raw pointers
+        // split the controller operation from this device's stable DMA fields.
+        let endpoint = msc.endpoint;
+        let bulk_in_ring = &msc.bulk_in_ring as *const DmaBuffer;
+        let bulk_out_ring = &msc.bulk_out_ring as *const DmaBuffer;
+        let in_producer = &mut msc.in_producer as *mut usize;
+        let out_producer = &mut msc.out_producer as *mut usize;
+        let in_cycle = &mut msc.in_cycle as *mut bool;
+        let out_cycle = &mut msc.out_cycle as *mut bool;
+        let cbw = &msc.cbw as *const DmaBuffer;
+        let csw = &msc.csw as *const DmaBuffer;
+        let data = &msc.data as *const DmaBuffer;
+        let register = unsafe { regs::RegisterBlock::new(self._mapping.as_ptr()) };
+        let result = unsafe {
+            self.msc_command(
+                register,
+                slot,
+                endpoint,
+                &*bulk_in_ring,
+                &*bulk_out_ring,
+                &mut *in_producer,
+                &mut *out_producer,
+                &mut *in_cycle,
+                &mut *out_cycle,
+                &*cbw,
+                &*csw,
+                &*data,
+                output.len(),
+                &msc::read10(lba as u32, blocks as u16),
+            )
+        };
+        if result.is_err() {
+            return false;
+        }
+        unsafe {
+            core::ptr::copy_nonoverlapping((&*data).as_ptr(), output.as_mut_ptr(), output.len())
+        };
+        true
     }
 
     fn read_device_descriptor(
@@ -2283,6 +2383,23 @@ pub fn poll() {
             unsafe { (&mut *(controller as *mut ControllerResources)).poll(POLL_EVENT_BUDGET) };
         }
     }
+}
+
+/// Read blocks from a currently online BOT device. The devfs adapter calls
+/// this synchronously from normal kernel context; disconnected devices are
+/// rejected by both the block-device manager and this controller lookup.
+pub fn read_usb_blocks(id: usize, lba: u64, output: &mut [u8]) -> bool {
+    for controller in &CONTROLLERS {
+        let controller = controller.load(Ordering::Acquire);
+        if controller != 0
+            && unsafe {
+                (&mut *(controller as *mut ControllerResources)).read_usb_blocks(id, lba, output)
+            }
+        {
+            return true;
+        }
+    }
+    false
 }
 
 /// Acknowledge xHCI interrupt causes and defer all event parsing to poll().

@@ -12,6 +12,8 @@ impl VfsDirectory for DevFileSystem {
             Ok(file)
         } else if let Ok(file) = super::nvme::open(path) {
             Ok(file)
+        } else if let Ok(file) = crate::blockdev::usb::open(path) {
+            Ok(file)
         } else if let Ok(file) = super::initrd::open(path) {
             Ok(file)
         } else if let Ok(file) = super::stdout::open(path) {
@@ -60,6 +62,10 @@ impl VfsDirectory for DevFileSystem {
                     &alloc::format!("nvme{device_idx}-{namespace_idx}"),
                 ));
             }
+        }
+
+        for (id, _) in crate::blockdev::usb::online_devices() {
+            entries.push(DirEntry::new(false, &crate::blockdev::usb::name(id)));
         }
 
         Ok(Arc::new(Mutex::new(SnapshotDirectory::new(entries))))

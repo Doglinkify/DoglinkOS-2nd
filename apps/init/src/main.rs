@@ -63,8 +63,10 @@ fn print_help() {
     println!("  clear              Clear the screen");
     println!("  disk-read          Read from /dev/disk0");
     println!("  nvme-read          Read from /dev/nvme0-0");
+    println!("  usb-read           Read the first sector from /dev/usb0");
     println!("  disk-size          Show /dev/disk0 size");
     println!("  nvme-size          Show /dev/nvme0-0 size");
+    println!("  usb-size           Show /dev/usb0 size");
     println!("  initrd-read        Read from /dev/initrd");
     println!("  file-read <path>   Print file contents");
     println!("  file-write <path>  Write lines to a file until EOF");
@@ -155,6 +157,15 @@ fn shell_main_loop() {
             } else {
                 println!("error while opening /dev/nvme0-0");
             }
+        } else if cmd == "usb-read" {
+            if let Some(fd) = sys_open("/dev/usb0", false) {
+                let mut content = [0; 512];
+                sys_read2(fd, &mut content);
+                println!("{content:?}");
+                sys_close(fd);
+            } else {
+                println!("error while opening /dev/usb0");
+            }
         } else if cmd == "disk-size" {
             if let Some(fd) = sys_open("/dev/disk0", false) {
                 let sz = sys_seek(fd, 0, SEEK_END);
@@ -170,6 +181,14 @@ fn shell_main_loop() {
                 sys_close(fd);
             } else {
                 println!("error while opening /dev/nvme0-0");
+            }
+        } else if cmd == "usb-size" {
+            if let Some(fd) = sys_open("/dev/usb0", false) {
+                let sz = sys_seek(fd, 0, SEEK_END);
+                println!("/dev/usb0 is {sz:?} bytes");
+                sys_close(fd);
+            } else {
+                println!("error while opening /dev/usb0");
             }
         } else if cmd == "initrd-read" {
             if let Some(fd) = sys_open("/dev/initrd", false) {

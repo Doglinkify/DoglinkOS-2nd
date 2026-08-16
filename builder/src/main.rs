@@ -1,5 +1,5 @@
 use argh::FromArgs;
-use builder::{FatBuilder, ImageBuilder};
+use builder::{FatBuilder, ImageBuilder, build_usb_storage_image};
 use ovmf_prebuilt::{Arch, FileType, Prebuilt, Source};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -53,11 +53,49 @@ struct Args {
     #[argh(option, short = 'S')]
     #[argh(description = "serial option passed to qemu")]
     serial: Option<String>,
+
+    #[argh(switch)]
+    #[argh(description = "attach the generated USB BOT test disk at startup")]
+    usb_storage: bool,
+
+    #[argh(switch)]
+    #[argh(description = "add an empty qemu-xhci controller for QMP hotplug tests")]
+    xhci: bool,
+
+    #[argh(switch)]
+    #[argh(description = "disable qemu-xhci USB 3 root ports (p3=0)")]
+    xhci_usb2_only: bool,
+
+    #[argh(option)]
+    #[argh(description = "path for the generated USB BOT test disk")]
+    usb_storage_image: Option<PathBuf>,
+
+    #[argh(option)]
+    #[argh(description = "QMP UNIX socket path passed to QEMU")]
+    qmp: Option<String>,
+
+    #[argh(switch)]
+    #[argh(description = "disable the graphical display (use serial/QMP instead)")]
+    headless: bool,
+
+    #[argh(switch)]
+    #[argh(description = "build with a serial+TTY kernel console for headless validation")]
+    serial_console: bool,
 }
 
 fn main() {
-    let img_path = build_img();
     let args: Args = argh::from_env();
+    let img_path = build_img(args.serial_console);
+    let usb_storage_path = args.usb_storage_image.clone().unwrap_or_else(|| {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("usb-hotplug-test.img")
+    });
+    if args.usb_storage || args.usb_storage_image.is_some() {
+        build_usb_storage_image(&usb_storage_path).expect("failed to build USB storage test image");
+        println!("Created USB BOT test image at {:#?}", usb_storage_path);
+    }
 
     if args.boot {
         let mut cmd = Command::new("qemu-system-x86_64");
@@ -105,25 +143,44 @@ fn main() {
         if args.vnc {
             cmd.arg("-vnc").arg(":1");
         }
+        if args.headless {
+            cmd.arg("-display").arg("none");
+        }
         if args.debug {
             cmd.arg("-s").arg("-S");
         }
+        if let Some(qmp) = args.qmp {
+            cmd.arg("-qmp")
+                .arg(format!("unix:{qmp},server=on,wait=off"));
+        }
+        let needs_xhci = args.xhci
+            || args.xhci_usb2_only
+            || args.usb_storage
+            || matches!(args.ps2_special, 2 | 3);
+        if needs_xhci {
+            // BOT storage is USB 2.0 in this validation suite.  Disable the
+            // SuperSpeed root ports whenever it is attached at startup so a
+            // controller/model port mapping cannot hide the USB 2 path.
+            let xhci = if args.xhci_usb2_only || args.usb_storage {
+                "qemu-xhci,id=xhci,p3=0"
+            } else {
+                "qemu-xhci,id=xhci"
+            };
+            cmd.arg("-device").arg(xhci);
+        }
+        if args.usb_storage {
+            let drive = format!(
+                "if=none,format=raw,readonly=on,id=usb-storage-drive,file={}",
+                usb_storage_path.display()
+            );
+            cmd.arg("-drive").arg(drive);
+            cmd.arg("-device")
+                .arg("usb-storage,id=usb-storage-start,drive=usb-storage-drive,bus=xhci.0");
+        }
         match args.ps2_special {
             1 => _ = cmd.arg("-machine").arg("i8042=off"),
-            2 => {
-                _ = cmd
-                    .arg("-device")
-                    .arg("qemu-xhci,id=xhci")
-                    .arg("-device")
-                    .arg("usb-kbd")
-            }
-            3 => {
-                _ = cmd
-                    .arg("-device")
-                    .arg("qemu-xhci,id=xhci")
-                    .arg("-device")
-                    .arg("usb-mouse")
-            }
+            2 => _ = cmd.arg("-device").arg("usb-kbd,bus=xhci.0"),
+            3 => _ = cmd.arg("-device").arg("usb-mouse,bus=xhci.0"),
             _ => {}
         }
         if let Some(opt) = args.serial {
@@ -135,7 +192,7 @@ fn main() {
     }
 }
 
-fn build_img() -> PathBuf {
+fn build_img(serial_console: bool) -> PathBuf {
     let doglinked_path = Path::new(env!("CARGO_BIN_FILE_DOGLINKED"));
     let t_path = Path::new(env!("CARGO_BIN_FILE_INFINITE_LOOP"));
     let imgview_path = Path::new(env!("CARGO_BIN_FILE_IMGVIEW"));
@@ -179,7 +236,14 @@ fn build_img() -> PathBuf {
     let files = BTreeMap::from([
         ("kernel", kernel_path.to_path_buf()),
         ("efi/boot/bootx64.efi", assets_dir.join("BOOTX64.EFI")),
-        ("limine.conf", assets_dir.join("limine.conf")),
+        (
+            "limine.conf",
+            assets_dir.join(if serial_console {
+                "limine-serial.conf"
+            } else {
+                "limine.conf"
+            }),
+        ),
         ("initrd.img", initrd_path.to_path_buf()),
     ]);
 

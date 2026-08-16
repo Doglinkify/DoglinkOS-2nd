@@ -13,6 +13,25 @@ use tempfile::NamedTempFile;
 
 type Files = BTreeMap<&'static str, PathBuf>;
 
+/// Build the deterministic GPT disk used by the xHCI/BOT QEMU tests.
+///
+/// It contains one FAT partition and is deliberately independent from the
+/// boot disk, so it can be attached and detached through QMP without changing
+/// the guest boot path.
+pub fn build_usb_storage_image(out_path: &Path) -> anyhow::Result<()> {
+    let assets_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets");
+    ImageBuilder::build(
+        BTreeMap::from([("usb-hotplug.txt", assets_dir.join("usb-hotplug.txt"))]),
+        out_path,
+    )
+    .with_context(|| {
+        format!(
+            "failed to build USB storage image at `{}`",
+            out_path.display()
+        )
+    })
+}
+
 pub struct ImageBuilder;
 
 impl ImageBuilder {

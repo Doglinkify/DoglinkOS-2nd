@@ -36,12 +36,45 @@ using the mouse wheel. The expected log sequence includes controller reset,
 the USB 2 root-port reset, device slot assignment, HID endpoint configuration,
 and one MSI configuration message or an explicit polling-fallback message.
 
-For a headless keyboard test, temporarily set the Limine command line in
-`builder/assets/limine.conf` to `stdio=serial+tty`, rebuild the image, and run
-QEMU with a serial log and monitor socket. Restore `stdio=tty` after the
-test. Send `sendkey a` through the monitor and verify that `a` appears at the
-TTY prompt in the serial log. This setting is necessary because `stdio=serial`
-alone does not deliver TTY input.
+## Headless USB storage and hotplug validation
+
+The builder can generate a deterministic GPT test image with one FAT
+partition and attach it as a BOT device at boot. `--usb-storage` automatically
+disables the QEMU USB 3 root ports (`p3=0`); `usb-storage-start` is the startup
+device ID and `usb-storage-drive` is its QEMU drive ID:
+
+```bash
+cargo run -p builder -- --boot --usb-storage --headless --serial-console --serial stdio
+```
+
+For repeatable runtime validation, run the non-graphical QMP harness:
+
+```bash
+scripts/validate-usb-hotplug.sh
+```
+
+It creates the USB image in a temporary directory, starts QEMU with the QMP
+UNIX socket and no USB device, then uses these QMP IDs in order:
+
+| Scenario | QMP IDs / command | Required serial assertion |
+| --- | --- | --- |
+| No device | Initial boot with `qemu-xhci,id=xhci,p3=0` only (`builder --xhci-usb2-only`) | xHCI initializes without an MSC line. |
+| Runtime insertion | `blockdev-add` `usb-hotplug-drive-1`; `device_add` `usb-hotplug-device-1` on `xhci.0` | `MSC BOT slot` and `capacity` appear. |
+| Runtime removal/reinsertion | `device_del usb-hotplug-device-1`, wait for `DEVICE_DELETED`, then re-add it | `remove slot` appears and a later MSC enumeration succeeds. |
+| Two devices | add `usb-hotplug-drive-2` / `usb-hotplug-device-2` while device 1 is present | two MSC enumeration/capacity records appear. |
+
+The script retains the serial-log path on exit and fails if its lifecycle log
+assertions are missing. Set `USB_BOT_RESET_FAILURE_LOG` in CI to the expected
+bounded-recovery line when running a QEMU or kernel fault-injection build that
+forces a BOT reset failure; upstream QEMU's `usb-storage` device does not
+provide a BOT-reset failure injector. This keeps the failure-path assertion
+explicit rather than treating a manually observed QMP error as BOT recovery.
+
+For a headless keyboard test, pass `--serial-console` to select the dedicated
+`stdio=serial+tty` Limine configuration, then run QEMU with a serial log and
+monitor socket. Send `sendkey a` through the monitor and verify that `a`
+appears at the TTY prompt in the serial log. This setting is necessary because
+`stdio=serial` alone does not deliver TTY input.
 
 ## Validation matrix
 

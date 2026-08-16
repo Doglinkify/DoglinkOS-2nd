@@ -1,0 +1,1 @@
+DoglinkOS-2nd USB BOT hotplug validation image.

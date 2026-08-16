@@ -8,5 +8,6 @@
 
 `builder/assets` 中文件来源：见 [builder/assets/README](builder/assets/README)
 
-PCIe xHCI（USB HID Boot 键盘和鼠标）的支持范围、启动方式和回归矩阵见
+PCIe xHCI（USB 2.0 HID Boot 键盘/鼠标、BOT 大容量存储和根端口热插拔）的
+支持范围、已验证环境、启动方式、限制及故障收集方法见
 [docs/XHCI.md](docs/XHCI.md)。

@@ -1,5 +1,6 @@
 use crate::blockdev::partition::ahci::AhciPartition;
 use crate::blockdev::partition::nvme::NvmePartition;
+use crate::blockdev::partition::usb::UsbPartition;
 use crate::println;
 use crate::task::process::ORIGINAL_KERNEL_CR3;
 use crate::task::process::ProcessContext as SyscallStackFrame;
@@ -275,23 +276,40 @@ pub fn sys_mount(args: &mut SyscallStackFrame) {
     match args.rsi {
         0 => {
             // 0 for AHCI
-            let block_device = crate::blockdev::ahci::AHCI
-                .iter()
-                .nth(args.rdx as usize)
-                .unwrap();
-            let partition = AhciPartition::new(block_device, args.r9 as usize);
-            mount(Some(partition), mountpoint, crate::vfs::get_fat_fs);
+            let block_device = crate::blockdev::ahci::AHCI.iter().nth(args.rdx as usize);
+            if let Some(block_device) = block_device
+                && let Ok(partition) = AhciPartition::new(block_device, args.r9 as usize)
+                && mount(Some(partition), mountpoint, crate::vfs::get_fat_fs).is_ok()
+            {
+                args.r10 = 0;
+            } else {
+                args.r10 = u64::MAX;
+            }
         }
         1 => {
             let block_device = crate::blockdev::nvme::NVME
                 .iter()
                 .nth(args.rdx as usize)
-                .unwrap()
-                .into_iter()
-                .next()
-                .unwrap();
-            let partition = NvmePartition::new(block_device, args.r9 as usize);
-            mount(Some(partition), mountpoint, crate::vfs::get_fat_fs);
+                .and_then(|device| device.into_iter().next());
+            if let Some(block_device) = block_device
+                && let Ok(partition) = NvmePartition::new(block_device, args.r9 as usize)
+                && mount(Some(partition), mountpoint, crate::vfs::get_fat_fs).is_ok()
+            {
+                args.r10 = 0;
+            } else {
+                args.r10 = u64::MAX;
+            }
+        }
+        2 => {
+            let block_device = crate::blockdev::usb::UsbBlockDevice::open(args.rdx as usize);
+            if let Some(block_device) = block_device
+                && let Ok(partition) = UsbPartition::new(block_device, args.r9 as usize)
+                && mount(Some(partition), mountpoint, crate::vfs::get_fat_fs).is_ok()
+            {
+                args.r10 = 0;
+            } else {
+                args.r10 = u64::MAX;
+            }
         }
         _ => args.r10 = u64::MAX,
     }

@@ -71,7 +71,7 @@ fn print_help() {
     println!("  file-read <path>   Print file contents");
     println!("  file-write <path>  Write lines to a file until EOF");
     println!("  ls [path]          List directory entries");
-    println!("  mount <args>       Mount a filesystem");
+    println!("  mount <ahci|nvme|usb> <disk> <partition> <path/>");
     println!("  file-rm            Remove /test.txt");
     println!("  beep <freq>        Play a beep");
     println!("  poweroff           Power off the machine");
@@ -237,6 +237,8 @@ fn shell_main_loop() {
                 0
             } else if typs == "nvme" {
                 1
+            } else if typs == "usb" {
+                2
             } else {
                 continue;
             };

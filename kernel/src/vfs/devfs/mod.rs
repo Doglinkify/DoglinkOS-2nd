@@ -14,9 +14,9 @@ use alloc::sync::Arc;
 
 use super::VfsDirectory;
 
-pub(super) fn get_fs<T>(_device: Option<T>) -> Arc<dyn VfsDirectory>
+pub(super) fn get_fs<T>(_device: Option<T>) -> Result<Arc<dyn VfsDirectory>, ()>
 where
     T: fatfs::ReadWriteSeek + Send + 'static,
 {
-    Arc::new(filesystem::DevFileSystem)
+    Ok(Arc::new(filesystem::DevFileSystem))
 }

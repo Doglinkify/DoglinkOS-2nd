@@ -128,18 +128,24 @@ pub fn init() {
     );
     let disk = RamDisk::with_addr_and_size(data.as_ptr() as *mut u8, data.len() as u64);
     Lazy::force(&MOUNT_TABLE);
-    mount(Some(disk), "/", self::fat::get_fs);
-    mount(None::<RamDisk>, "/dev/", self::devfs::get_fs);
-    mount(None::<RamDisk>, "/proc/", self::procfs::get_fs);
+    mount(Some(disk), "/", self::fat::get_fs).expect("failed to mount initrd");
+    mount(None::<RamDisk>, "/dev/", self::devfs::get_fs).expect("failed to mount devfs");
+    mount(None::<RamDisk>, "/proc/", self::procfs::get_fs).expect("failed to mount procfs");
 }
 
-pub fn mount<T>(device: Option<T>, path: &str, fs: fn(Option<T>) -> Arc<dyn VfsDirectory>)
+pub fn mount<T>(
+    device: Option<T>,
+    path: &str,
+    fs: fn(Option<T>) -> Result<Arc<dyn VfsDirectory>, ()>,
+) -> Result<(), ()>
 where
     T: fatfs::ReadWriteSeek,
 {
+    let filesystem = fs(device)?;
     unsafe {
-        (*Lazy::as_mut_ptr(&MOUNT_TABLE)).push((path.to_owned(), fs(device)));
+        (*Lazy::as_mut_ptr(&MOUNT_TABLE)).push((path.to_owned(), filesystem));
     }
+    Ok(())
 }
 
 pub fn get_file(path: &str) -> Result<Arc<Mutex<dyn VfsFile>>, ()> {

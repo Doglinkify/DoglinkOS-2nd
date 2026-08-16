@@ -4,13 +4,13 @@ use alloc::vec::Vec;
 use fatfs::{FileSystem, FsOptions, ReadWriteSeek};
 use spin::Mutex;
 
-pub fn get_fs<T>(device: Option<T>) -> Arc<dyn VfsDirectory>
+pub fn get_fs<T>(device: Option<T>) -> Result<Arc<dyn VfsDirectory>, ()>
 where
     T: fatfs::ReadWriteSeek + Send + 'static,
 {
-    Arc::new(WrappedFileSystem(
-        FileSystem::new(device.unwrap(), FsOptions::new()).unwrap(),
-    ))
+    let device = device.ok_or(())?;
+    let filesystem = FileSystem::new(device, FsOptions::new()).map_err(|_| ())?;
+    Ok(Arc::new(WrappedFileSystem(filesystem)))
 }
 
 pub struct WrappedFileSystem<T: ReadWriteSeek>(FileSystem<T>);
@@ -61,21 +61,24 @@ impl<T: fatfs::ReadWriteSeek, TP: fatfs::TimeProvider, OCC> VfsFile
     for WrappedFile<'_, T, TP, OCC>
 {
     fn size(&mut self) -> usize {
-        let mut res = 0;
+        let mut res: usize = 0;
         for extent in self.0.extents() {
-            res += extent.unwrap().size as usize;
+            let Ok(extent) = extent else {
+                return 0;
+            };
+            res = res.saturating_add(extent.size as usize);
         }
         res
     }
 
     fn read(&mut self, buf: &mut [u8]) -> usize {
         use fatfs::Read;
-        self.0.read(buf).unwrap()
+        self.0.read(buf).unwrap_or(0)
     }
 
     fn write(&mut self, buf: &[u8]) -> usize {
         use fatfs::Write;
-        self.0.write(buf).unwrap()
+        self.0.write(buf).unwrap_or(0)
     }
 
     fn seek(&mut self, pos: crate::vfs::SeekFrom) -> usize {
@@ -86,6 +89,6 @@ impl<T: fatfs::ReadWriteSeek, TP: fatfs::TimeProvider, OCC> VfsFile
                 crate::vfs::SeekFrom::Current(x) => fatfs::SeekFrom::Current(x as i64),
                 crate::vfs::SeekFrom::Start(x) => fatfs::SeekFrom::Start(x as u64),
             })
-            .unwrap() as usize
+            .unwrap_or(0) as usize
     }
 }

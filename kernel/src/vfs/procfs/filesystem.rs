@@ -13,11 +13,11 @@ struct ProcTextFile {
     pos: usize,
 }
 
-pub(crate) fn get_fs<T>(_: Option<T>) -> Arc<dyn VfsDirectory>
+pub(crate) fn get_fs<T>(_: Option<T>) -> Result<Arc<dyn VfsDirectory>, ()>
 where
     T: fatfs::ReadWriteSeek,
 {
-    Arc::new(ProcFileSystem)
+    Ok(Arc::new(ProcFileSystem))
 }
 
 impl VfsDirectory for ProcFileSystem {

@@ -17,6 +17,7 @@ pub mod cpu;
 pub mod inputdev;
 pub mod int;
 pub mod mm;
+pub mod net;
 pub mod pcie;
 pub mod power;
 pub mod rtc;

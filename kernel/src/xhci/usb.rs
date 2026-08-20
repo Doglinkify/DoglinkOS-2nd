@@ -327,18 +327,16 @@ pub fn parse_msc_bot_interface(data: &[u8]) -> Result<MscBotInterface, Descripto
                 }
             }
         }
-        if bot {
-            if let (Some(bulk_in), Some(bulk_out)) = (bulk_in, bulk_out) {
-                if selected.is_some() {
-                    return Err(DescriptorError::Unsupported);
-                }
-                selected = Some(MscBotInterface {
-                    configuration_value: configuration.value,
-                    interface_number: interface.number,
-                    bulk_in,
-                    bulk_out,
-                });
+        if bot && let (Some(bulk_in), Some(bulk_out)) = (bulk_in, bulk_out) {
+            if selected.is_some() {
+                return Err(DescriptorError::Unsupported);
             }
+            selected = Some(MscBotInterface {
+                configuration_value: configuration.value,
+                interface_number: interface.number,
+                bulk_in,
+                bulk_out,
+            });
         }
     }
     selected.ok_or(DescriptorError::Unsupported)

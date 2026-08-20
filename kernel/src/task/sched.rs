@@ -100,13 +100,12 @@ pub fn schedule(context: &mut super::process::ProcessContext, current_process_ex
             }
         }
         for tid in 0..tasks.len() {
-            if let Some(process) = tasks[tid].as_ref() {
-                if matches!(process.state, ProcessState::Runnable)
-                    && tid != CURRENT_TASK_ID.load(Ordering::Relaxed)
-                {
-                    max_tid = Some(tid);
-                    break;
-                }
+            if let Some(process) = tasks[tid].as_ref()
+                && matches!(process.state, ProcessState::Runnable)
+                && tid != CURRENT_TASK_ID.load(Ordering::Relaxed)
+            {
+                max_tid = Some(tid);
+                break;
             }
         }
         if max_tid.is_none() {

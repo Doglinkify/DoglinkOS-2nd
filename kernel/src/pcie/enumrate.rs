@@ -87,7 +87,7 @@ impl PCIConfigSpace {
     }
 
     pub unsafe fn write_u8(&self, offset: usize, value: u8) {
-        assert!(offset + 1 <= 4096);
+        assert!(offset < 4096);
         unsafe { core::ptr::write_volatile((self as *const _ as *mut u8).add(offset), value) }
     }
 

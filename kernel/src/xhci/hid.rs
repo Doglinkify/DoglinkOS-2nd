@@ -32,20 +32,28 @@ impl KeyboardState {
             }
         }
         for usage in 0..=u8::MAX {
-            if marked(&self.pressed, usage) && !marked(&next, usage) {
-                if let Some(scancode) = set1_usage(usage) {
-                    submit(scancode | 0x80);
-                }
+            if marked(&self.pressed, usage)
+                && !marked(&next, usage)
+                && let Some(scancode) = set1_usage(usage)
+            {
+                submit(scancode | 0x80);
             }
         }
         for usage in 0..=u8::MAX {
-            if !marked(&self.pressed, usage) && marked(&next, usage) {
-                if let Some(scancode) = set1_usage(usage) {
-                    submit(scancode);
-                }
+            if !marked(&self.pressed, usage)
+                && marked(&next, usage)
+                && let Some(scancode) = set1_usage(usage)
+            {
+                submit(scancode);
             }
         }
         self.pressed = next;
+    }
+}
+
+impl Default for KeyboardState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -91,6 +99,12 @@ impl MouseState {
                 submit(MouseEvent::Scroll(lines));
             }
         }
+    }
+}
+
+impl Default for MouseState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

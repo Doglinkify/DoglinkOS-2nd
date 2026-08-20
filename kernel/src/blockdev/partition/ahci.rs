@@ -17,14 +17,20 @@ impl BlockIo for crate::blockdev::ahci::AhciBlockDevice {
     }
 
     fn read_blocks(&mut self, start_lba: Lba, output: &mut [u8]) -> Result<(), Self::Error> {
-        if output.len() % crate::blockdev::ahci::BLOCK_SIZE != 0 {
+        if !output
+            .len()
+            .is_multiple_of(crate::blockdev::ahci::BLOCK_SIZE)
+        {
             return Err(true);
         }
         let mut device = self.device.lock();
-        let mut sector = start_lba.to_u64();
-        for chunk in output.chunks_exact_mut(crate::blockdev::ahci::BLOCK_SIZE) {
+        for (sector, chunk) in (start_lba.to_u64()..).zip(
+            output
+                .as_chunks_mut::<{ crate::blockdev::ahci::BLOCK_SIZE }>()
+                .0
+                .iter_mut(),
+        ) {
             device.read_block(sector, chunk);
-            sector += 1;
         }
         Ok(())
     }

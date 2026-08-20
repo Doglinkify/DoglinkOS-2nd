@@ -381,7 +381,7 @@ impl ControllerResources {
             unsafe {
                 register.write64(
                     self.runtime + regs::RT_INTR0 + regs::ERDP,
-                    self.event_ring.physical_address() + (self.event_consumer * 16) as u64
+                    (self.event_ring.physical_address() + (self.event_consumer * 16) as u64)
                         | regs::ERDP_EHB,
                 );
                 let iman = register.read32(self.runtime + regs::RT_INTR0 + regs::IMAN);
@@ -440,7 +440,7 @@ impl ControllerResources {
             unsafe {
                 register.write64(
                     self.runtime + regs::RT_INTR0 + regs::ERDP,
-                    self.event_ring.physical_address() + (self.event_consumer * 16) as u64
+                    (self.event_ring.physical_address() + (self.event_consumer * 16) as u64)
                         | regs::ERDP_EHB,
                 );
                 let iman = register.read32(self.runtime + regs::RT_INTR0 + regs::IMAN);
@@ -488,7 +488,7 @@ impl ControllerResources {
         unsafe {
             register.write64(
                 self.runtime + regs::RT_INTR0 + regs::ERDP,
-                self.event_ring.physical_address() + (self.event_consumer * 16) as u64
+                (self.event_ring.physical_address() + (self.event_consumer * 16) as u64)
                     | regs::ERDP_EHB,
             );
             let iman = register.read32(self.runtime + regs::RT_INTR0 + regs::IMAN);
@@ -735,19 +735,18 @@ impl ControllerResources {
                 break;
             }
             let header = unsafe { register.read32(offset) };
-            if header & regs::XECAP_ID_MASK == 2 {
-                if let Some(protocol) =
+            if header & regs::XECAP_ID_MASK == 2
+                && let Some(protocol) =
                     supported_protocol(header, unsafe { register.read32(offset + 8) })
-                {
-                    crate::println!(
-                        "[INFO] xhci: protocol USB {}.{} maps root ports {}..{}",
-                        protocol.major,
-                        protocol.minor,
-                        protocol.port_start,
-                        protocol.port_start.saturating_add(protocol.port_count - 1),
-                    );
-                    protocols.push(protocol);
-                }
+            {
+                crate::println!(
+                    "[INFO] xhci: protocol USB {}.{} maps root ports {}..{}",
+                    protocol.major,
+                    protocol.minor,
+                    protocol.port_start,
+                    protocol.port_start.saturating_add(protocol.port_count - 1),
+                );
+                protocols.push(protocol);
             }
             let next = ((header & regs::XECAP_NEXT_MASK) >> regs::XECAP_NEXT_SHIFT) as usize * 4;
             if next == 0 || next == offset {
@@ -961,7 +960,7 @@ impl ControllerResources {
     }
 
     fn service_root_ports(&mut self, register: regs::RegisterBlock) {
-        if self.poll_ticks % ROOT_PORT_RESCAN_INTERVAL == 0 {
+        if self.poll_ticks.is_multiple_of(ROOT_PORT_RESCAN_INTERVAL) {
             let ports: alloc::vec::Vec<u8> =
                 self.root_ports.iter().map(|record| record.port).collect();
             for port in ports {
@@ -1354,7 +1353,7 @@ impl ControllerResources {
             }
             let header = unsafe { core::slice::from_raw_parts(config_header.as_ptr(), 9) };
             let total = u16::from_le_bytes([header[2], header[3]]) as usize;
-            if total < 9 || total > 4096 {
+            if !(9..=4096).contains(&total) {
                 fail_published!(InitError::Command(CompletionCode::TrbError));
             }
             let configuration = match DmaBuffer::new(total, 64) {
@@ -2031,7 +2030,7 @@ impl ControllerResources {
 
     fn read_usb_blocks(&mut self, id: usize, lba: u64, output: &mut [u8]) -> bool {
         if output.is_empty()
-            || output.len() % msc::BLOCK_SIZE != 0
+            || !output.len().is_multiple_of(msc::BLOCK_SIZE)
             || output.len() > msc::MAX_READ_BYTES
             || lba > u32::MAX as u64
         {

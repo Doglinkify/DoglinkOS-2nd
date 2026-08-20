@@ -3,6 +3,9 @@
 #![feature(str_from_raw_parts)]
 #![allow(non_snake_case)]
 #![allow(clippy::result_unit_err)]
+#![allow(clippy::len_without_is_empty)]
+#![allow(clippy::missing_safety_doc)]
+#![allow(clippy::too_many_arguments)]
 
 extern crate alloc;
 pub mod acpi;

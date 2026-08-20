@@ -133,6 +133,7 @@ pub fn init() {
     mount(None::<RamDisk>, "/proc/", self::procfs::get_fs).expect("failed to mount procfs");
 }
 
+#[allow(clippy::type_complexity)]
 pub fn mount<T>(
     device: Option<T>,
     path: &str,
@@ -150,10 +151,10 @@ where
 
 pub fn get_file(path: &str) -> Result<Arc<Mutex<dyn VfsFile>>, ()> {
     for fs in MOUNT_TABLE.iter() {
-        if path.starts_with(&fs.0) {
-            if let Ok(res) = fs.1.file(&path[(fs.0.len() - 1)..]) {
-                return Ok(res);
-            }
+        if path.starts_with(&fs.0)
+            && let Ok(res) = fs.1.file(&path[(fs.0.len() - 1)..])
+        {
+            return Ok(res);
         }
     }
     Err(())
@@ -161,10 +162,10 @@ pub fn get_file(path: &str) -> Result<Arc<Mutex<dyn VfsFile>>, ()> {
 
 pub fn get_directory(path: &str) -> Result<Arc<Mutex<dyn VfsDirHandle>>, ()> {
     for fs in MOUNT_TABLE.iter() {
-        if path.starts_with(&fs.0) {
-            if let Ok(res) = fs.1.directory(&path[(fs.0.len() - 1)..]) {
-                return Ok(res);
-            }
+        if path.starts_with(&fs.0)
+            && let Ok(res) = fs.1.directory(&path[(fs.0.len() - 1)..])
+        {
+            return Ok(res);
         }
     }
     Err(())
@@ -172,10 +173,10 @@ pub fn get_directory(path: &str) -> Result<Arc<Mutex<dyn VfsDirHandle>>, ()> {
 
 pub fn create_file_or_open_existing(path: &str) -> Result<Arc<Mutex<dyn VfsFile>>, ()> {
     for fs in MOUNT_TABLE.iter() {
-        if path.starts_with(&fs.0) {
-            if let Ok(res) = fs.1.create_file_or_open_existing(&path[(fs.0.len() - 1)..]) {
-                return Ok(res);
-            }
+        if path.starts_with(&fs.0)
+            && let Ok(res) = fs.1.create_file_or_open_existing(&path[(fs.0.len() - 1)..])
+        {
+            return Ok(res);
         }
     }
     Err(())

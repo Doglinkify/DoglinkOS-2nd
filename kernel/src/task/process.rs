@@ -142,10 +142,8 @@ impl Process<'_> {
             &mut *(phys_to_virt(ORIGINAL_KERNEL_CR3.0.start_address().as_u64()) as *mut PageTable)
         };
         Self::r_copy(kernel_p4t, p4t, 4, false, false);
-        let page_table = unsafe {
-            OffsetPageTable::new(p4t, x86_64::addr::VirtAddr::new_truncate(phys_to_virt(0)))
-        };
-        page_table
+
+        unsafe { OffsetPageTable::new(p4t, x86_64::addr::VirtAddr::new_truncate(phys_to_virt(0))) }
     }
 
     fn r_copy(

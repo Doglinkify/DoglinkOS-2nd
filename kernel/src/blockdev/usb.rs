@@ -220,7 +220,7 @@ impl BlockIo for UsbBlockDevice {
     }
 
     fn read_blocks(&mut self, start_lba: Lba, output: &mut [u8]) -> Result<(), Self::Error> {
-        if output.len() % BLOCK_SIZE != 0 {
+        if !output.len().is_multiple_of(BLOCK_SIZE) {
             return Err(UsbError::InvalidBuffer);
         }
         let start = start_lba

@@ -20,7 +20,7 @@ impl BlockIo for crate::blockdev::nvme::NvmeBlockDevice {
 
     fn read_blocks(&mut self, start_lba: Lba, output: &mut [u8]) -> Result<(), Self::Error> {
         let block_size = self.namespace.block_size() as usize;
-        if output.len() % block_size != 0 {
+        if !output.len().is_multiple_of(block_size) {
             return Err(true);
         }
         let Some(entry) = self.qpairs.first_entry() else {

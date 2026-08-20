@@ -295,10 +295,10 @@ impl<'a, T: BotTransport> Bot<'a, T> {
                     return Err(BotError::ShortTransfer);
                 }
             }
-            DataDirection::Out if !data.is_empty() => {
-                if self.transport.bulk_out(data)? != data.len() {
-                    return Err(BotError::ShortTransfer);
-                }
+            DataDirection::Out
+                if !data.is_empty() && self.transport.bulk_out(data)? != data.len() =>
+            {
+                return Err(BotError::ShortTransfer);
             }
             _ => {}
         }
@@ -339,7 +339,7 @@ impl<'a, T: BotTransport> Bot<'a, T> {
     }
 
     pub fn read10(&mut self, lba: u32, data: &mut [u8]) -> Result<(), BotError> {
-        if data.is_empty() || data.len() % BLOCK_SIZE != 0 {
+        if data.is_empty() || !data.len().is_multiple_of(BLOCK_SIZE) {
             return Err(BotError::ReadTooLarge);
         }
         let mut current_lba = lba;

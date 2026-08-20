@@ -96,7 +96,7 @@ pub fn find_aligned_continuous_mem(cnt: usize, alignment: usize) -> Option<u64> 
     if cnt == 0
         || !alignment.is_power_of_two()
         || alignment < PAGE_SIZE
-        || alignment % PAGE_SIZE != 0
+        || !alignment.is_multiple_of(PAGE_SIZE)
     {
         return None;
     }
@@ -113,7 +113,7 @@ pub fn find_aligned_continuous_mem(cnt: usize, alignment: usize) -> Option<u64> 
         }
         if current_size == cnt {
             let start = i - cnt + 1;
-            if start % alignment_pages == 0 {
+            if start.is_multiple_of(alignment_pages) {
                 state.set_range(start, i + 1, false);
                 return Some((start * PAGE_SIZE) as u64);
             }
@@ -124,7 +124,7 @@ pub fn find_aligned_continuous_mem(cnt: usize, alignment: usize) -> Option<u64> 
 }
 
 pub fn dealloc_continuous_mem(addr: u64, cnt: usize) {
-    if cnt == 0 || addr as usize % PAGE_SIZE != 0 {
+    if cnt == 0 || !(addr as usize).is_multiple_of(PAGE_SIZE) {
         return;
     }
     let start = addr as usize / PAGE_SIZE;

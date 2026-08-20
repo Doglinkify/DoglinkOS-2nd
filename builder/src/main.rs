@@ -81,6 +81,10 @@ struct Args {
     #[argh(switch)]
     #[argh(description = "build with a serial+TTY kernel console for headless validation")]
     serial_console: bool,
+
+    #[argh(switch)]
+    #[argh(description = "emulate a Realtek RTL8139 network card instead of a default Intel one")]
+    rtl_nic: bool,
 }
 
 fn main() {
@@ -185,6 +189,10 @@ fn main() {
         }
         if let Some(opt) = args.serial {
             cmd.arg("-serial").arg(opt);
+        }
+        if args.rtl_nic {
+            cmd.arg("-device").arg("rtl8139,netdev=net0");
+            cmd.arg("-netdev").arg("user,id=net0");
         }
 
         let mut child = cmd.spawn().unwrap();

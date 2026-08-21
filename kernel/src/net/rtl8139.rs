@@ -23,10 +23,10 @@ impl Rtl8139 {
 
         // BAR0 is I/O Space BAR
         let io_base = (config.bar[0] & !0b11) as u16;
-        Self::fromio_base(io_base)
+        Self::from_io_base(io_base)
     }
 
-    fn fromio_base(io_base: u16) -> Self {
+    fn from_io_base(io_base: u16) -> Self {
         // read MAC address
         let mut mac = [0u8; 6];
         for i in 0..6 {

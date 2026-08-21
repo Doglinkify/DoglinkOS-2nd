@@ -7,7 +7,7 @@ trait Nic: Send {
     fn mac(&self) -> [u8; 6];
 
     #[allow(dead_code)]
-    fn poll(&self);
+    fn poll(&mut self);
 
     fn format_mac(&self) -> String {
         let mac = self.mac();
@@ -22,4 +22,11 @@ static NICS: Lazy<Mutex<Vec<Box<dyn Nic>>>> = Lazy::new(|| Mutex::new(Vec::new()
 
 pub fn init() {
     rtl8139::init();
+}
+
+pub fn poll() {
+    let mut nics = NICS.lock();
+    for nic in nics.iter_mut() {
+        nic.poll();
+    }
 }

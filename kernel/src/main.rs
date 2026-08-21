@@ -132,6 +132,7 @@ fn hang() -> ! {
 
 fn idle() -> ! {
     loop {
+        DoglinkOS_2nd::net::poll();
         DoglinkOS_2nd::xhci::poll();
         // Polling consumes only a bounded event batch.  Sleeping until the
         // next hardware interrupt avoids burning a core when no USB device is

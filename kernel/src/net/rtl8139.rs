@@ -9,9 +9,10 @@ use crate::{
 };
 
 struct Rtl8139 {
-    _io_base: u16,
+    io_base: u16,
     mac: [u8; 6],
-    _rx_buffer: DmaBuffer,
+    rx_buffer: DmaBuffer,
+    cur_rx: u16,
 }
 
 impl Rtl8139 {
@@ -22,10 +23,10 @@ impl Rtl8139 {
 
         // BAR0 is I/O Space BAR
         let io_base = (config.bar[0] & !0b11) as u16;
-        Self::from_io_base(io_base)
+        Self::fromio_base(io_base)
     }
 
-    fn from_io_base(io_base: u16) -> Self {
+    fn fromio_base(io_base: u16) -> Self {
         // read MAC address
         let mut mac = [0u8; 6];
         for i in 0..6 {
@@ -52,15 +53,19 @@ impl Rtl8139 {
 
         // configure receive buffer
         unsafe {
-            PortWriteOnly::new(io_base + 0x44).write(0xfu8 | (1 << 7));
+            PortWriteOnly::new(io_base + 0x44).write(0xfu8);
         }
 
-        // do not enable receive and transmitter now because we don't have polling logic yet
+        // enable receive and transmitter
+        unsafe {
+            PortWriteOnly::new(io_base + 0x37).write(0x0cu8);
+        }
 
         Self {
-            _io_base: io_base,
+            io_base,
             mac,
-            _rx_buffer: rx_buffer,
+            rx_buffer,
+            cur_rx: 0,
         }
     }
 }
@@ -72,7 +77,41 @@ impl super::Nic for Rtl8139 {
         self.mac
     }
 
-    fn poll(&self) {}
+    fn poll(&mut self) {
+        const ROK: u16 = 0x0001;
+        const TOK: u16 = 0x0004;
+        let status: u16 = unsafe { PortReadOnly::new(self.io_base + 0x3e).read() };
+        unsafe {
+            PortWriteOnly::new(self.io_base + 0x3e).write(status);
+        }
+        if status & TOK != 0 {
+            println!("[DEBUG] rtl8139: sent packet");
+        }
+        if status & ROK != 0 {
+            let mut read_index = self.cur_rx;
+            let rx_buffer_ptr = self.rx_buffer.as_ptr();
+            let rx_header: u32 = unsafe { *(rx_buffer_ptr.add(read_index as usize) as *const _) };
+            let rx_status = (rx_header & 0xffff) as u16;
+            let rx_size = (rx_header >> 16) as u16;
+            if rx_status & 0x0001 != 0 {
+                let packet = unsafe {
+                    let data_ptr = rx_buffer_ptr.add(read_index as usize + 4).cast_const();
+                    let len = rx_size as usize - 4;
+                    core::slice::from_raw_parts(data_ptr, len)
+                };
+                println!("[DEBUG] rtl8139: rx packet {packet:?}");
+            }
+            read_index += rx_size + 7;
+            read_index &= !3;
+            if read_index > 8192 {
+                read_index -= 8192;
+            }
+            unsafe {
+                PortWriteOnly::new(self.io_base + 0x38).write(read_index - 16);
+            }
+            self.cur_rx = read_index;
+        }
+    }
 }
 
 pub(super) fn init() {

@@ -16,8 +16,6 @@ use x86_64::structures::gdt::{Descriptor, GlobalDescriptorTable};
 use x86_64::structures::paging::frame::PhysFrame;
 use x86_64::structures::tss::TaskStateSegment;
 
-use crate::println;
-
 use self::stack::KernelStack;
 
 pub struct TssSingleton {
@@ -52,7 +50,7 @@ pub static TSS: TssSingleton = TssSingleton {
 //     tss
 // });
 
-pub fn set_rsp0(stack: &KernelStack) {
+fn set_rsp0(stack: &KernelStack) {
     TSS.set_rsp0(stack.get_top());
 }
 

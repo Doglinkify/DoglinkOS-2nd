@@ -73,7 +73,7 @@ pub struct Process<'a> {
     pub files: [Option<Arc<Mutex<dyn crate::vfs::VfsFile>>>; 64],
     pub directories: [Option<Arc<Mutex<dyn crate::vfs::VfsDirHandle>>>; 64],
     pub ipc_handles: [Option<IpcHandle>; ipc::IPC_MAX_HANDLES],
-    pub kernel_stack: KernelStack,
+    pub(super) kernel_stack: KernelStack,
 }
 
 pub static ORIGINAL_KERNEL_CR3: Lazy<(PhysFrame, Cr3Flags)> = Lazy::new(Cr3::read);

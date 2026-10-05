@@ -391,6 +391,16 @@ pub fn sys_ipc_accept(handle: usize) -> Option<usize> {
     if res < 0 { None } else { Some(res as usize) }
 }
 
+pub fn sys_sleep(duration: usize) {
+    unsafe {
+        core::arch::asm!(
+            "int 0x80",
+            in("rax") 23,
+            in("rdi") duration,
+        );
+    }
+}
+
 #[macro_export]
 macro_rules! print {
     ($($arg:tt)*) => ($crate::_print(format_args!($($arg)*)));

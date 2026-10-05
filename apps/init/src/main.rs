@@ -79,6 +79,7 @@ fn print_help() {
     println!("  reboot             Reboot the machine");
     println!("  netdump            Dump recieved packets from upppd");
     println!("  netdump2           Dump recieved packets from kernel NIC devices");
+    println!("  sleep <duration>   Block shell process for <duration> ticks");
     println!();
     println!("External commands:");
     println!("  /bin/<name>        Execute a command from /bin");
@@ -281,6 +282,11 @@ fn shell_main_loop() {
             .map(|x| x.trim().parse().unwrap_or(4))
         {
             netdump::main(cnt);
+        } else if let Some(duration) = cmd
+            .strip_prefix("sleep")
+            .map(|x| x.trim().parse().unwrap_or(100))
+        {
+            sys_sleep(duration);
         } else {
             let mut buf2 = [0u8; 128];
             let len2 = if buf[0] != b'/' {

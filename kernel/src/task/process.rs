@@ -52,8 +52,7 @@ pub struct ProcessContext {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WaitReason {
     WaitPid(usize),
-    // Additional wait reasons can be added here when kernel-visible blocking
-    // states beyond waitpid are introduced.
+    Sleep(u64),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

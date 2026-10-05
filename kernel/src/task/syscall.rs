@@ -4,6 +4,8 @@ use crate::blockdev::partition::usb::UsbPartition;
 use crate::println;
 use crate::task::process::ORIGINAL_KERNEL_CR3;
 use crate::task::process::ProcessContext as SyscallStackFrame;
+use crate::task::process::WaitReason;
+use crate::task::sched::block_current;
 use crate::vfs::SeekFrom;
 use crate::vfs::mount;
 use core::arch::naked_asm;
@@ -53,7 +55,7 @@ pub extern "x86-interrupt" fn syscall_handler(_: InterruptStackFrame) {
     )
 }
 
-const NUM_SYSCALLS: usize = 23;
+const NUM_SYSCALLS: usize = 24;
 
 const SYSCALL_TABLE: [fn(&mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_test,
@@ -79,6 +81,7 @@ const SYSCALL_TABLE: [fn(&mut SyscallStackFrame); NUM_SYSCALLS] = [
     sys_closedir,
     sys_ipc,
     sys_read3,
+    sys_sleep,
 ];
 
 unsafe extern "C" fn do_syscall(args: *mut SyscallStackFrame) {
@@ -154,7 +157,6 @@ pub fn sys_waitpid(args: &mut SyscallStackFrame) {
         args,
         crate::task::process::WaitReason::WaitPid(args.rdi as usize),
     );
-    println!("code after block_current() is reachable now!");
 }
 
 pub fn sys_getpid(args: &mut SyscallStackFrame) {
@@ -357,4 +359,15 @@ pub fn sys_closedir(args: &mut SyscallStackFrame) {
 
 pub fn sys_ipc(args: &mut SyscallStackFrame) {
     crate::task::ipc::syscall(args);
+}
+
+pub fn sys_sleep(args: &mut SyscallStackFrame) {
+    println!("[DEBUG] sys_sleep: before block_current()");
+    block_current(
+        args,
+        WaitReason::Sleep(
+            crate::task::sched::TOTAL_TICKS.load(Ordering::Relaxed) as u64 + args.rdi,
+        ),
+    );
+    println!("[DEBUG] sys_sleep: after block_current()");
 }

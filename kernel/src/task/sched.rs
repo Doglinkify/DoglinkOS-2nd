@@ -113,6 +113,10 @@ pub fn schedule(context: &mut super::process::ProcessContext, current_process_ex
                 tasks[tid].as_ref().unwrap().state,
                 ProcessState::Blocked(WaitReason::WaitPid(pid))
                     if tasks.get(pid).is_none_or(Option::is_none)
+            ) || matches!(
+                tasks[tid].as_ref().unwrap().state,
+                ProcessState::Blocked(WaitReason::Sleep(deadline))
+                    if TOTAL_TICKS.load(Ordering::Relaxed) as u64 >= deadline
             );
             if should_wake {
                 tasks[tid].as_mut().unwrap().state = ProcessState::Runnable;

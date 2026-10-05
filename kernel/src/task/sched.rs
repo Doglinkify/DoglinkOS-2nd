@@ -104,6 +104,9 @@ pub(crate) extern "C" fn timer(context: *mut super::process::ProcessContext) {
 }
 
 pub fn schedule(context: &mut super::process::ProcessContext, current_process_exited: bool) {
+    // WARNING: When do_exit() calls this function, the current process and its
+    // kernel stack have already been dropped. We must not invoke any physical
+    // frame allocator here, as doing so could corrupt the execution flow.
     let mut max_tm = 0;
     let mut max_tid = None;
     let mut tasks = super::process::TASKS.lock();

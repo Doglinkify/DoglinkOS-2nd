@@ -154,6 +154,7 @@ pub fn sys_waitpid(args: &mut SyscallStackFrame) {
         args,
         crate::task::process::WaitReason::WaitPid(args.rdi as usize),
     );
+    println!("code after block_current() is reachable now!");
 }
 
 pub fn sys_getpid(args: &mut SyscallStackFrame) {

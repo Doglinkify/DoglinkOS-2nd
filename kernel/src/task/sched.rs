@@ -65,8 +65,10 @@ pub fn switch_to(
     unsafe {
         Cr3::write(new_cr3, flags);
     }
+    let mut rsp_rubbish_bin = VirtAddr::zero();
     let (rsp_old, rsp_new) = {
         let mut tasks = super::process::TASKS.lock();
+        let mut leaking_ptr_to_old_rsp = &raw mut rsp_rubbish_bin;
         if !current_process_exited {
             let cur = tasks[current].as_mut().unwrap();
             // cur.context = *context;
@@ -74,6 +76,7 @@ pub fn switch_to(
             unsafe {
                 core::arch::x86_64::_fxsave64((&mut cur.fpu_state) as *mut _ as *mut u8);
             }
+            leaking_ptr_to_old_rsp = &raw mut cur.kernel_stack.current_vaddr;
         }
         let nxt = tasks[next].as_ref().unwrap();
         // *context = nxt.context;
@@ -85,7 +88,7 @@ pub fn switch_to(
         CURRENT_TASK_ID.store(next, Ordering::Relaxed);
         // leak the pointers but release the lock
         (
-            &raw mut tasks[current].as_mut().unwrap().kernel_stack.current_vaddr,
+            leaking_ptr_to_old_rsp,
             &raw const tasks[next].as_ref().unwrap().kernel_stack.current_vaddr,
         )
     };

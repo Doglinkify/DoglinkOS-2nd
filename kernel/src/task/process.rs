@@ -63,7 +63,7 @@ pub enum ProcessState {
 
 pub struct Process<'a> {
     pub page_table: OffsetPageTable<'a>,
-    pub context: ProcessContext,
+    // pub context: ProcessContext,
     pub fpu_state: [u128; 32],
     pub tm: u64,
     pub fs: VirtAddr,
@@ -122,7 +122,7 @@ impl Process<'_> {
         files[1] = crate::vfs::get_file("/dev/stdout").ok();
         Process {
             page_table: Self::t0_p4_table(),
-            context: ProcessContext::default(),
+            // context: ProcessContext::default(),
             fpu_state: FPU_INIT,
             tm: 10,
             fs: VirtAddr::new(0),
@@ -210,7 +210,7 @@ impl Process<'_> {
             page_table: unsafe {
                 OffsetPageTable::new(p4t, x86_64::addr::VirtAddr::new_truncate(phys_to_virt(0)))
             },
-            context: new_context,
+            // context: new_context,
             fpu_state: FPU_INIT,
             tm: 0,
             fs: VirtAddr::new(0),
@@ -302,7 +302,7 @@ pub fn do_exec(args: &mut ProcessContext) {
         let mut tasks = TASKS.lock();
         let current_task = tasks[c_tid].as_mut().unwrap();
         current_task.free_page_tables(true);
-        current_task.context = ProcessContext::default();
+        // current_task.context = ProcessContext::default();
         current_task.fpu_state = FPU_INIT;
         current_task.fs = VirtAddr::zero();
         current_task.brk = 0;

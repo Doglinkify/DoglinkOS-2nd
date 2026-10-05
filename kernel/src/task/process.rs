@@ -1,6 +1,7 @@
 use crate::mm::page_alloc::alloc_physical_page;
 use crate::mm::phys_to_virt;
 use crate::task::ipc::{self, IpcHandle};
+use crate::task::sched::{add_process, del_process};
 use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -65,7 +66,6 @@ pub struct Process<'a> {
     pub page_table: OffsetPageTable<'a>,
     pub context: ProcessContext,
     pub fpu_state: [u128; 32],
-    pub tm: u64,
     pub fs: VirtAddr,
     pub brk: u64,
     pub exe_path: Option<String>,
@@ -123,7 +123,6 @@ impl Process<'_> {
             page_table: Self::t0_p4_table(),
             context: ProcessContext::default(),
             fpu_state: FPU_INIT,
-            tm: 10,
             fs: VirtAddr::new(0),
             brk: 0,
             exe_path: None,
@@ -210,7 +209,6 @@ impl Process<'_> {
             },
             context: new_context,
             fpu_state: FPU_INIT,
-            tm: 0,
             fs: VirtAddr::new(0),
             brk: self.brk,
             exe_path: self.exe_path.clone(),
@@ -284,6 +282,7 @@ pub fn do_fork(context: &mut ProcessContext) {
         tasks.resize_with(new_tid + 1, || None);
     }
     tasks[new_tid] = Some(new_process);
+    add_process(new_tid);
 }
 
 pub fn do_exec(args: &mut ProcessContext) {
@@ -370,6 +369,7 @@ pub fn do_exit(args: &mut ProcessContext) {
             task.free_page_tables(false);
         }
         tasks[c_tid] = None;
+        del_process(c_tid);
     }
     super::sched::schedule(args, true);
 }

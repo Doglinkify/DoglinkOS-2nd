@@ -14,6 +14,8 @@ use x86_64::structures::gdt::{Descriptor, GlobalDescriptorTable};
 use x86_64::structures::paging::frame::PhysFrame;
 use x86_64::structures::tss::TaskStateSegment;
 
+use crate::task::sched::add_process;
+
 pub static TSS: Lazy<TaskStateSegment> = Lazy::new(|| {
     let mut tss = TaskStateSegment::new();
     let rsp0_pa = crate::mm::page_alloc::find_continuous_mem(16)
@@ -57,6 +59,7 @@ pub fn init() {
             } else {
                 tasks[0] = Some(self::process::Process::task_0());
             }
+            add_process(0);
             new_cr3_va = tasks[0].as_ref().unwrap().page_table.level_4_table() as *const _ as u64;
         }
         let new_cr3 =

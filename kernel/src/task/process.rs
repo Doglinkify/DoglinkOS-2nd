@@ -132,7 +132,8 @@ impl Process<'_> {
             files,
             directories: [const { None }; 64],
             ipc_handles: [const { None }; ipc::IPC_MAX_HANDLES],
-            kernel_stack: KernelStack::fake(&ProcessContext::default()),
+            kernel_stack: KernelStack::new(),
+            // kernel_stack: KernelStack::fake(&ProcessContext::default()),
         }
     }
 

@@ -31,6 +31,8 @@ pub extern "x86-interrupt" fn syscall_handler(_: InterruptStackFrame) {
         "push rax",
         "mov rdi, rsp",
         "call {}",
+        ".global __asm_syscall_ret",
+        "__asm_syscall_ret:",
         "pop rax",
         "pop rbx",
         "pop rcx",

@@ -1,9 +1,11 @@
 pub mod ipc;
 pub mod process;
 pub mod sched;
+mod stack;
 pub mod syscall;
 
 use core::arch::asm;
+use core::cell::UnsafeCell;
 use spin::Lazy;
 use x86_64::PrivilegeLevel;
 use x86_64::addr::PhysAddr;
@@ -14,14 +16,45 @@ use x86_64::structures::gdt::{Descriptor, GlobalDescriptorTable};
 use x86_64::structures::paging::frame::PhysFrame;
 use x86_64::structures::tss::TaskStateSegment;
 
-pub static TSS: Lazy<TaskStateSegment> = Lazy::new(|| {
-    let mut tss = TaskStateSegment::new();
-    let rsp0_pa = crate::mm::page_alloc::find_continuous_mem(16)
-        .expect("task: unable to reserve kernel stack")
-        + 0x10000; // 64k rsp0
-    tss.privilege_stack_table[0] = VirtAddr::new(crate::mm::phys_to_virt(rsp0_pa));
-    tss
-});
+use crate::println;
+
+use self::stack::KernelStack;
+
+pub struct TssSingleton {
+    inner: UnsafeCell<TaskStateSegment>,
+}
+
+unsafe impl Sync for TssSingleton {}
+
+impl TssSingleton {
+    fn get(&self) -> &TaskStateSegment {
+        unsafe { &*self.inner.get() }
+    }
+
+    fn set_rsp0(&self, vaddr: VirtAddr) {
+        let p = core::ptr::addr_of_mut!(unsafe { &mut *self.inner.get() }.privilege_stack_table[0]);
+        unsafe {
+            core::ptr::write_volatile(p, vaddr);
+        }
+    }
+}
+
+pub static TSS: TssSingleton = TssSingleton {
+    inner: UnsafeCell::new(TaskStateSegment::new()),
+};
+
+// pub static TSS: Lazy<TaskStateSegment> = Lazy::new(|| {
+//     let mut tss = TaskStateSegment::new();
+//     let rsp0_pa = crate::mm::page_alloc::find_continuous_mem(16)
+//         .expect("task: unable to reserve kernel stack")
+//         + 0x10000; // 64k rsp0
+//     tss.privilege_stack_table[0] = VirtAddr::new(crate::mm::phys_to_virt(rsp0_pa));
+//     tss
+// });
+
+pub fn set_rsp0(stack: &KernelStack) {
+    TSS.set_rsp0(stack.get_top());
+}
 
 pub static GDT: Lazy<GlobalDescriptorTable> = Lazy::new(|| {
     let mut gdt = GlobalDescriptorTable::new();
@@ -29,7 +62,7 @@ pub static GDT: Lazy<GlobalDescriptorTable> = Lazy::new(|| {
     gdt.append(Descriptor::kernel_data_segment());
     gdt.append(Descriptor::user_code_segment());
     gdt.append(Descriptor::user_data_segment());
-    gdt.append(Descriptor::tss_segment(&TSS));
+    gdt.append(Descriptor::tss_segment(TSS.get()));
     gdt
 });
 
@@ -57,6 +90,7 @@ pub fn init() {
             } else {
                 tasks[0] = Some(self::process::Process::task_0());
             }
+            set_rsp0(&tasks[0].as_ref().unwrap().kernel_stack);
             new_cr3_va = tasks[0].as_ref().unwrap().page_table.level_4_table() as *const _ as u64;
         }
         let new_cr3 =

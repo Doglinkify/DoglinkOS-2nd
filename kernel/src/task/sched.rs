@@ -1,7 +1,10 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 use x86_64::PhysAddr;
+use x86_64::VirtAddr;
 use x86_64::registers::control::Cr3;
 use x86_64::structures::paging::PhysFrame;
+
+use crate::task::set_rsp0;
 
 use super::process::ProcessContext;
 use super::process::ProcessState;
@@ -22,8 +25,29 @@ pub fn block_current(context: &mut ProcessContext, reason: WaitReason) {
     schedule(context, false);
 }
 
+#[unsafe(naked)]
+extern "C" fn switch_to_asm(rsp_old: *mut VirtAddr, rsp_new: *const VirtAddr) {
+    core::arch::naked_asm!(
+        "push rbx",
+        "push rbp",
+        "push r12",
+        "push r13",
+        "push r14",
+        "push r15",
+        "mov [rdi], rsp",
+        "mov rsp, [rsi]",
+        "pop r15",
+        "pop r14",
+        "pop r13",
+        "pop r12",
+        "pop rbp",
+        "pop rbx",
+        "ret",
+    )
+}
+
 pub fn switch_to(
-    context: &mut super::process::ProcessContext,
+    _context: &mut super::process::ProcessContext,
     next: usize,
     current_process_exited: bool,
 ) {
@@ -41,24 +65,31 @@ pub fn switch_to(
     unsafe {
         Cr3::write(new_cr3, flags);
     }
-    {
+    let (rsp_old, rsp_new) = {
         let mut tasks = super::process::TASKS.lock();
         if !current_process_exited {
             let cur = tasks[current].as_mut().unwrap();
-            cur.context = *context;
+            // cur.context = *context;
             cur.fs = x86_64::registers::model_specific::FsBase::read();
             unsafe {
                 core::arch::x86_64::_fxsave64((&mut cur.fpu_state) as *mut _ as *mut u8);
             }
         }
         let nxt = tasks[next].as_ref().unwrap();
-        *context = nxt.context;
+        // *context = nxt.context;
         x86_64::registers::model_specific::FsBase::write(nxt.fs);
         unsafe {
             core::arch::x86_64::_fxrstor64((&nxt.fpu_state) as *const _ as *const u8);
         }
+        set_rsp0(&tasks[next].as_ref().unwrap().kernel_stack);
         CURRENT_TASK_ID.store(next, Ordering::Relaxed);
-    }
+        // leak the pointers but release the lock
+        (
+            &raw mut tasks[current].as_mut().unwrap().kernel_stack.current_vaddr,
+            &raw const tasks[next].as_ref().unwrap().kernel_stack.current_vaddr,
+        )
+    };
+    switch_to_asm(rsp_old, rsp_new);
 }
 
 pub(crate) extern "C" fn timer(context: *mut super::process::ProcessContext) {

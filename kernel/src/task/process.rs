@@ -1,6 +1,7 @@
 use crate::mm::page_alloc::alloc_physical_page;
 use crate::mm::phys_to_virt;
 use crate::task::ipc::{self, IpcHandle};
+use crate::task::stack::KernelStack;
 use alloc::borrow::ToOwned;
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -73,6 +74,7 @@ pub struct Process<'a> {
     pub files: [Option<Arc<Mutex<dyn crate::vfs::VfsFile>>>; 64],
     pub directories: [Option<Arc<Mutex<dyn crate::vfs::VfsDirHandle>>>; 64],
     pub ipc_handles: [Option<IpcHandle>; ipc::IPC_MAX_HANDLES],
+    pub kernel_stack: KernelStack,
 }
 
 pub static ORIGINAL_KERNEL_CR3: Lazy<(PhysFrame, Cr3Flags)> = Lazy::new(Cr3::read);
@@ -131,6 +133,7 @@ impl Process<'_> {
             files,
             directories: [const { None }; 64],
             ipc_handles: [const { None }; ipc::IPC_MAX_HANDLES],
+            kernel_stack: KernelStack::fake(&ProcessContext::default()),
         }
     }
 
@@ -218,6 +221,7 @@ impl Process<'_> {
             files: self.files.clone(),
             directories: self.directories.clone(),
             ipc_handles: ipc::clone_handle_table(&self.ipc_handles),
+            kernel_stack: KernelStack::fake(&new_context),
         }
     }
 
